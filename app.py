@@ -256,7 +256,7 @@ with c1:
             use_container_width=True, config={"displayModeBar": False})
         gap = th - S["score"]
         msg = (f"기준점수 {th:.0f}점 <b>도달</b> — 월 점검일에 모아둔 현금으로 매수 검토" if gap <= 0 else
-               f"기준점수 {th:.0f}점까지 <b>{gap:.1f}점</b> 남음")
+               f"기준점수 {th:.0f}점까지 <b>{max(gap, 0.1):.1f}점</b> 남음")
         st.markdown(f"<p class='big-note'>{msg}</p>", unsafe_allow_html=True)
         st.markdown(f"<div class='kv'><span>30년 평균</span><span>{rules['avg_score']:.0f}점</span></div>"
                     f"<div class='kv'><span>매수 점검일</span><span>매월 {cfg.buy_check_day}일</span></div>",
