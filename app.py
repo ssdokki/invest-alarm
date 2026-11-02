@@ -25,7 +25,8 @@ TEST = os.environ.get("APP_TEST") == "1"
 st.markdown("""
 <style>
 #MainMenu, footer, [data-testid="stToolbar"], [data-testid="stDecoration"] {visibility:hidden;}
-.block-container {padding-top:1.2rem; padding-bottom:3rem; max-width:1180px;}
+header[data-testid="stHeader"] {display:none !important;}
+.block-container, [data-testid="stMainBlockContainer"] {padding-top:2.2rem !important; padding-bottom:3rem; max-width:1180px;}
 h1,h2,h3 {letter-spacing:-0.02em;}
 .app-title {font-size:1.6rem; font-weight:800; margin:0;}
 .app-sub {color:#8a94a6; font-size:.85rem; margin-top:2px;}
