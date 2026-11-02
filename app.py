@@ -136,15 +136,88 @@ def gauge(value, title, steps, rng=(0, 100), mark=None):
     return fig
 
 
+
+# ───────────── 알림 팝업 ─────────────
+POP_DAYS = int(getattr(cfg, "popup_days", 30))
+NEW_DAYS = int(getattr(cfg, "popup_new_days", 7))
+POP_KIND = {"SELL": ("매도 신호", SELL), "BUY": ("매수 신호", BUY), "BUY_CROSS": ("매수 신호", BUY),
+            "ALARM_ON": ("매도 알람 켜짐", WARN), "ALARM_EXPIRED": ("매도 알람 해제", MUTED)}
+POP_ORDER = {"SELL": 0, "BUY": 1, "BUY_CROSS": 1, "ALARM_ON": 2, "ALARM_EXPIRED": 3}
+
+
+def recent_events():
+    today = pd.Timestamp(datetime.now(ZoneInfo("Asia/Seoul")).date())
+    out = []
+    for name, r in res.items():
+        for e in r["events"]:
+            age = (today - pd.Timestamp(e["date"]).normalize()).days
+            if 0 <= age <= POP_DAYS:
+                out.append((age, name, e))
+    out.sort(key=lambda x: (POP_ORDER.get(x[2]["type"], 9), x[0]))
+    return out
+
+
+def event_line(name, e):
+    t = e["type"]
+    d = pd.Timestamp(e["date"]).strftime("%Y-%m-%d")
+    if t in ("BUY", "BUY_CROSS"):
+        return f"{d} 점검 · 크레마지수 {e['score']:.1f}점 → 모아둔 현금으로 매수 검토"
+    if t == "SELL":
+        return (f"{d} 주 · 주간 RSI {e['rsi']:.1f}로 매도선 도달 (알람 시작 "
+                f"{pd.Timestamp(e['start']):%Y-%m-%d}) → 매도, 레버리지는 전량")
+    if t == "ALARM_ON":
+        return f"{d} 주 · 주간 RSI {e['rsi']:.1f} 과열 지속 → 아직 팔지 않고 경계"
+    return f"{pd.Timestamp(e['start']):%Y-%m-%d}에 켜진 알람이 기한 안에 매도선에 닿지 않아 해제"
+
+
+@st.dialog("알림", width="large")
+def show_popup():
+    items = recent_events()
+    if items:
+        st.markdown(f"**최근 {POP_DAYS}일 신호 {len(items)}건**")
+        for age, name, e in items:
+            label, color = POP_KIND[e["type"]]
+            new = "<span class='pill p-sell' style='margin-left:6px'>NEW</span>" if age <= NEW_DAYS else ""
+            st.markdown(
+                f"<div style='border-left:5px solid {color};background:rgba(138,148,166,.08);"
+                f"border-radius:8px;padding:10px 14px;margin:6px 0'>"
+                f"<b style='color:{color}'>{name} {label}</b>{new}"
+                f"<div style='font-size:.9rem;margin-top:3px'>{event_line(name, e)}</div></div>",
+                unsafe_allow_html=True)
+    else:
+        st.success(f"최근 {POP_DAYS}일 동안 새 신호가 없습니다.")
+    st.markdown("**현재 상태**")
+    for name, r in res.items():
+        s = r["snap"]
+        extra = ""
+        if s["alarm_start"] is not None and s.get("sell_price"):
+            extra = f" · 이번 주 종가 {s['sell_price']:,.2f} 아래 마감 시 매도"
+        st.markdown(f"<div class='kv'><span>{name}</span><span>크레마지수 {s['score']:.1f} {pill(s['buy_status'])}"
+                    f" &nbsp; 주간 RSI {s['rsi_w']:.1f} {pill(s['sell_status'])}{extra}</span></div>",
+                    unsafe_allow_html=True)
+    st.write("")
+    if st.button("확인", type="primary", use_container_width=True):
+        st.rerun()
+
+
+if not st.session_state.get("popup_done"):
+    st.session_state.popup_done = True
+    show_popup()
+
 # ───────────── 상단 ─────────────
-top_l, top_r = st.columns([4, 1])
+top_l, top_r = st.columns([3, 2])
 with top_l:
     asof = max(r["snap"]["asof"] for r in res.values())
     st.markdown(f"<div class='app-title'>투자알람</div><div class='app-sub'>데이터 기준 {fdate(asof)} · "
                 f"갱신 {fetched:%m-%d %H:%M} (KST){' · 장중 잠정값 포함' if any(r['snap']['market_open'] for r in res.values()) else ''}"
                 f"</div>", unsafe_allow_html=True)
 with top_r:
-    if st.button("새로고침", use_container_width=True):
+    b1, b2 = st.columns(2)
+    n_new = sum(1 for a, _, _ in recent_events() if a <= NEW_DAYS)
+    if b1.button(f"알림 {n_new}" if n_new else "알림", use_container_width=True,
+                 type="primary" if n_new else "secondary"):
+        show_popup()
+    if b2.button("새로고침", use_container_width=True):
         load_market.clear()
         st.rerun()
 for n in notes:
@@ -363,7 +436,7 @@ with tab_help:
 **매도 (주간 RSI)** — 주간 RSI가 {rules['alarm_rsi']:.0f} 이상을 {rules['alarm_weeks']}주 유지하면 알람이 켜집니다.
 알람 후 {rules['alarm_months']}개월 안에 {rules['sell_rsi']:.0f} 이하로 내려오면 그 주에 매도(레버리지는 전량), 못 내려오면 알람 해제입니다.
 
-**알림 메일** — 매일 아침 07:30 클라우드에서 확인해 새 신호가 있으면 {cfg.mail_to}로 보내고, 매주 토요일에는 주간 현황을 보냅니다.
+**알림 팝업** — 앱을 열면 최근 {POP_DAYS}일 안의 신호와 현재 상태를 팝업으로 보여 줍니다({NEW_DAYS}일 이내는 NEW 표시). 오른쪽 위 '알림' 버튼으로 다시 열 수 있습니다.
 
 **참고** — 주간 봉은 금요일 종가 기준입니다(Yahoo 차트는 월요일 날짜로 표시). 장중에는 이번 주 값이 '잠정'이며 알람은 확정값으로만 판단합니다.
 데이터: Yahoo Finance, CNN 공포탐욕지수. 테스프레소 영상 규칙을 자동 계산한 도구이며 투자 권유가 아닙니다.
