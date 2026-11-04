@@ -86,11 +86,15 @@ def main(test=False, out="site"):
         print("SITE_PASSWORD가 없습니다 (GitHub Secrets에 등록하세요).", file=sys.stderr)
         return 1
     cfg = load()
-    closes, fg, notes = data.load_all(cfg, test=test)
+    closes, fg, notes, fginfo = data.load_all(cfg, test=test, save=not test)
     idx = []
     for name, t in cfg.indices.items():
         r = signals.compute(name, closes[t], closes[cfg.vol_index[name]], fg, cfg.rules, cfg)
-        idx.append(index_payload(name, r))
+        ip = index_payload(name, r)
+        asof = r["snap"]["asof"]
+        cnn_recent = any(abs((asof - d).days) <= 3 for d in fginfo["cnn_dates"]) if fginfo["cnn_dates"] else False
+        ip["snap"]["fg_src"] = "CNN" if cnn_recent else "자체 계산"
+        idx.append(ip)
         s = r["snap"]
         print(f"{name}: 크레마지수 {s['score']:.1f} ({s['buy_status']}) / 주간RSI {s['rsi_w']:.1f} ({s['sell_status']})")
     payload = {
@@ -103,7 +107,17 @@ def main(test=False, out="site"):
         "popup_days": int(getattr(cfg, "popup_days", 30)),
         "popup_new_days": int(getattr(cfg, "popup_new_days", 7)),
         "indices": idx,
+        "fg": {"status": fginfo["cnn_status"], "compare": fginfo["compare"],
+               "proxy_last": clean(fginfo["proxy"].iloc[-1]) if len(fginfo["proxy"]) else None,
+               "components": {k: clean(v) for k, v in fginfo["components"].iloc[-1].items()}},
     }
+    cmp_ = fginfo["compare"]
+    if cmp_:
+        print(f"공포탐욕 비교({cmp_['start']}~{cmp_['end']}, {cmp_['days']}일): 상관계수 {cmp_['corr']}, "
+              f"평균 차이 {cmp_['mae']}점, 같은 구간 {cmp_['same_zone']:.0%}, 최근 CNN {cmp_['last_cnn']} / 자체 {cmp_['last_proxy']}")
+    else:
+        print("공포탐욕 비교: CNN 데이터 없음")
+    print("공포탐욕 상태:", fginfo["cnn_status"], "/ 자체 계산 최근값:", payload["fg"]["proxy_last"])
     enc = encrypt(payload, pw)
     tpl = (ROOT / "site_template.html").read_text(encoding="utf-8")
     chart_js = (ROOT / "vendor" / "chart.umd.js").read_text(encoding="utf-8")
