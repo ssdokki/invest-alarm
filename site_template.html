@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>투자알람</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--ink:#1d2433;--sub:#7b8597;--line:#e4e7ec;--buy:#1a8f4c;--sell:#d32f2f;--warn:#d98a00;--accent:#1F4E78;--soft:rgba(138,148,166,.12)}
+@media (prefers-color-scheme:dark){:root{--bg:#12151b;--card:#1b2029;--ink:#e6e9ef;--sub:#98a2b3;--line:#2c3340;--accent:#7fb2e5;--soft:rgba(138,148,166,.16)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;cursor:pointer}
+.wrap{max-width:1180px;margin:0 auto;padding:22px 16px 48px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.sub{color:var(--sub);font-size:.84rem}
+.pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.76rem;font-weight:700;white-space:nowrap}
+.p-buy{background:rgba(26,143,76,.14);color:var(--buy)}.p-sell{background:rgba(211,47,47,.14);color:var(--sell)}
+.p-warn{background:rgba(217,138,0,.16);color:#b87400}.p-none{background:var(--soft);color:var(--sub)}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:8px 14px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+/* 로그인 */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+#login .card{width:100%;max-width:360px;text-align:center;padding:28px 22px}
+#login h1{margin:0 0 4px;font-size:1.5rem}
+#login input[type=password]{width:100%;margin:18px 0 10px;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font-size:1rem}
+#login .btn{width:100%;padding:11px}
+#login label{display:flex;gap:6px;align-items:center;justify-content:center;margin-top:10px;font-size:.85rem;color:var(--sub)}
+#err{color:var(--sell);font-size:.85rem;min-height:1.2em;margin-top:8px}
+/* 본문 */
+#app{display:none}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.top h1{margin:0;font-size:1.6rem;letter-spacing:-.02em}
+.top .acts{display:flex;gap:8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.mini .row{display:flex;gap:22px;margin-top:6px}
+.mini .v{font-size:1.4rem;font-weight:800;margin:2px 0 4px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:16px 0 12px}
+.seg button{border:0;background:var(--card);color:var(--ink);padding:7px 16px}
+.seg button.on{background:var(--accent);color:#fff}
+.gcard h3{margin:0;font-size:1rem;display:flex;gap:8px;align-items:center}
+.gauge{display:block;margin:6px auto 0;max-width:300px;width:100%}
+.note{margin:6px 0 8px;font-size:.95rem}
+.kv{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:.9rem}
+.kv span:first-child{color:var(--sub)}
+.tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:14px 0 6px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.tile .tl{font-size:.76rem;color:var(--sub);display:flex;justify-content:space-between}
+.tile .tv{font-size:1.2rem;font-weight:800;margin:3px 0 7px}
+.bar{height:6px;border-radius:6px;background:var(--soft);overflow:hidden}.bar i{display:block;height:100%;border-radius:6px}
+.tile .ts{font-size:.74rem;color:var(--sub);margin-top:4px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:22px 0 14px;flex-wrap:wrap}
+.tabs button{border:0;background:none;color:var(--sub);padding:9px 12px;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:700}
+.ranges{display:flex;gap:6px;margin-bottom:8px}
+.ranges button{padding:4px 10px;font-size:.82rem}
+.chart{position:relative;height:300px}.chart.sm{height:190px}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:left}
+th{color:var(--sub);font-weight:600}
+td.r,th.r{text-align:right}
+.hide{display:none}
+/* 팝업 */
+#modal{position:fixed;inset:0;background:rgba(15,20,30,.45);display:none;align-items:flex-start;justify-content:center;padding:6vh 16px;z-index:50}
+#modal .card{width:100%;max-width:720px;max-height:86vh;overflow:auto;padding:22px}
+#modal h2{margin:0 0 12px;font-size:1.3rem;display:flex;justify-content:space-between}
+.ev{border-left:5px solid;border-radius:8px;background:var(--soft);padding:10px 14px;margin:8px 0}
+.ev b{font-size:.98rem}.ev div{font-size:.88rem;margin-top:3px}
+#mbody .kv{flex-wrap:wrap;gap:4px}
+.foot{color:var(--sub);font-size:.78rem;margin-top:26px;line-height:1.6}
+@media (max-width:900px){.tiles{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:640px){.grid2{grid-template-columns:1fr}.top h1{font-size:1.3rem}.tiles{grid-template-columns:repeat(2,1fr)}.hide-m{display:none}}
+</style>
+</head>
+<body>
+<div id="login">
+  <form class="card" id="lf" autocomplete="on">
+    <h1>투자알람</h1>
+    <div class="sub">크레마지수 매수 · 주간 RSI 매도</div>
+    <input type="text" name="username" value="invest-alarm" autocomplete="username" style="display:none">
+    <input type="password" id="pw" placeholder="비밀번호" autocomplete="current-password" required>
+    <button class="btn primary" id="go">들어가기</button>
+    <label><input type="checkbox" id="remember"> 이 기기에서 비밀번호 기억</label>
+    <div id="err"></div>
+  </form>
+</div>
+
+<div id="app" class="wrap">
+  <div class="top">
+    <div><h1>투자알람</h1><div class="sub" id="meta"></div><div class="sub" id="notes"></div></div>
+    <div class="acts"><button class="btn" id="bellBtn">알림</button><button class="btn" id="logout">잠금</button></div>
+  </div>
+  <div class="grid2" id="minis"></div>
+  <div class="seg" id="seg"></div>
+  <div class="grid2">
+    <div class="card gcard"><h3>매수 — 크레마지수 <span id="buyPill"></span></h3><div id="g1"></div><div id="buyInfo"></div></div>
+    <div class="card gcard"><h3>매도 — 주간 RSI <span id="sellPill"></span></h3><div id="g2"></div><div id="sellInfo"></div></div>
+  </div>
+  <div class="tiles" id="tiles"></div>
+  <div class="sub" id="raw"></div>
+
+  <div class="tabs" id="tabs">
+    <button data-t="chart" class="on">차트</button><button data-t="log">신호 기록</button><button data-t="help">안내</button>
+  </div>
+  <section id="t-chart">
+    <div class="ranges" id="ranges"></div>
+    <div class="card"><div class="sub" style="margin-bottom:6px">가격 · 200일선 · 신호 (주간)</div><div class="chart"><canvas id="cPrice"></canvas></div></div>
+    <div class="grid2" style="margin-top:14px">
+      <div class="card"><div class="sub" style="margin-bottom:6px">크레마지수 (파란 점선 = 매수 기준, 회색 = 30년 평균)</div><div class="chart sm"><canvas id="cScore"></canvas></div></div>
+      <div class="card"><div class="sub" style="margin-bottom:6px">주간 RSI (빨강 = 알람 72, 주황 = 매도 50)</div><div class="chart sm"><canvas id="cRsi"></canvas></div></div>
+    </div>
+    <div class="sub" style="margin-top:8px">주황 음영 = 매도 알람이 켜져 있던 기간 · 주간 봉은 금요일 종가 기준</div>
+  </section>
+  <section id="t-log" class="hide"><div class="card"><table id="log"></table></div></section>
+  <section id="t-help" class="hide"><div class="card" id="help" style="line-height:1.7"></div></section>
+  <div class="foot">테스프레소 크레마지수·매도알람 규칙을 매일 아침 자동 계산한 결과입니다. 투자 권유가 아니며 판단과 책임은 본인에게 있습니다. 데이터: Yahoo Finance, CNN.</div>
+</div>
+
+<div id="modal"><div class="card"><h2><span>알림</span><button class="btn" id="mx">✕</button></h2><div id="mbody"></div><button class="btn primary" id="mok" style="width:100%;margin-top:14px;padding:11px">확인</button></div></div>
+
+<script>/*__CHARTJS__*/</script>
+<script>
+const ENC = __PAYLOAD__;
+const $ = id => document.getElementById(id);
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const LS = {get(k){try{return localStorage.getItem(k)}catch(e){return null}}, set(k,v){try{localStorage.setItem(k,v)}catch(e){}}, del(k){try{localStorage.removeItem(k)}catch(e){}}};
+const KEY_LS = 'invest-alarm-key';
+
+async function deriveRaw(pw){
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
+  return new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2', salt:b64(ENC.salt), iterations:ENC.iter, hash:'SHA-256'}, base, 256));
+}
+async function decryptWith(raw){
+  const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+  const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv:b64(ENC.iv)}, key, b64(ENC.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+// "기억"하면 비밀번호가 아니라 비밀번호에서 만든 키만 이 기기에 저장한다 (salt가 고정이라 매일 새 페이지에서도 유효).
+const enc64 = u => btoa(String.fromCharCode(...u));
+async function unlock(pw, remember){
+  const raw = await deriveRaw(pw);
+  const D = await decryptWith(raw);
+  if (remember) LS.set(KEY_LS, enc64(raw)); else LS.del(KEY_LS);
+  return D;
+}
+$('lf').addEventListener('submit', async ev => {
+  ev.preventDefault(); $('err').textContent=''; $('go').disabled=true; $('go').textContent='확인 중…';
+  try { start(await unlock($('pw').value, $('remember').checked)); }
+  catch(e){ $('err').textContent = window.crypto && crypto.subtle ? '비밀번호가 맞지 않습니다.' : '이 브라우저에서는 암호 해제를 지원하지 않습니다.'; }
+  $('go').disabled=false; $('go').textContent='들어가기';
+});
+(async () => { const s = LS.get(KEY_LS); if (s) { try { $('remember').checked = true; start(await decryptWith(b64(s))); } catch(e){ LS.del(KEY_LS); } } })();
+$('logout').onclick = () => { LS.del(KEY_LS); location.reload(); };
+
+/* ───────── 화면 ───────── */
+const C = {buy:'#1a8f4c', sell:'#d32f2f', warn:'#d98a00', muted:'#8a94a6', blue:'#2f6fb2'};
+const f = (v,d=2) => v==null ? '-' : Number(v).toLocaleString('ko-KR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const pct = v => v==null ? '-' : (v>=0?'+':'')+(v*100).toFixed(1)+'%';
+const pill = t => { const c = t.startsWith('매수')?'p-buy':t.startsWith('매도')?'p-sell':(t.startsWith('경계')||t.startsWith('비쌈'))?'p-warn':'p-none'; return `<span class="pill ${c}">${t}</span>`; };
+const KIND = {BUY:['매수 신호',C.buy], BUY_CROSS:['매수 신호',C.buy], ALARM_ON:['매도 알람 켜짐',C.warn], SELL:['매도 신호',C.sell], ALARM_EXPIRED:['매도 알람 해제',C.muted]};
+const ORDER = {SELL:0, BUY:1, BUY_CROSS:1, ALARM_ON:2, ALARM_EXPIRED:3};
+let D, cur, range = 260, charts = {};
+
+function gauge(value, bands, mark, sub){
+  const W=300,H=172,cx=150,cy=150,R=118,T=20;
+  const pt=(v,r)=>{const a=Math.PI*(1-v/100);return [cx+r*Math.cos(a), cy-r*Math.sin(a)]};
+  const arc=(a,b,r)=>{const [x1,y1]=pt(a,r),[x2,y2]=pt(b,r);return `M${x1},${y1} A${r},${r} 0 0 1 ${x2},${y2}`};
+  let s=`<svg class="gauge" viewBox="0 0 ${W} ${H}">`;
+  bands.forEach(([a,b,c])=> s+=`<path d="${arc(a,b,R)}" stroke="${c}" stroke-width="${T}" fill="none" opacity=".28"/>`);
+  const v=Math.max(0,Math.min(100,value??0));
+  s+=`<path d="${arc(0,Math.max(v,.5),R-T-6)}" stroke="currentColor" stroke-width="9" fill="none" stroke-linecap="round" opacity=".75"/>`;
+  if(mark!=null){const [x1,y1]=pt(mark,R-T/2-14),[x2,y2]=pt(mark,R+T/2+2);s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#1F4E78" stroke-width="3.5"/>`;}
+  [0,20,40,60,80,100].forEach(t=>{const [x,y]=pt(t,R+T/2+10);s+=`<text x="${x}" y="${y}" font-size="10" fill="#8a94a6" text-anchor="middle">${t}</text>`});
+  s+=`<text x="${cx}" y="${cy-12}" font-size="40" font-weight="700" text-anchor="middle" fill="currentColor">${value==null?'-':value.toFixed(1)}</text>`;
+  s+=`<text x="${cx}" y="${cy+12}" font-size="11" text-anchor="middle" fill="#8a94a6">${sub}</text></svg>`;
+  return s;
+}
+
+function today(){ const n=new Date(); return new Date(n.getFullYear(),n.getMonth(),n.getDate()); }
+function age(d){ return Math.round((today()-new Date(d+'T00:00:00'))/86400000); }
+function recent(){
+  const out=[]; D.indices.forEach(x=>x.events.forEach(e=>{const a=age(e.date); if(a>=0&&a<=D.popup_days) out.push([a,x.name,e])}));
+  return out.sort((p,q)=>(ORDER[p[2].type]-ORDER[q[2].type])||(p[0]-q[0]));
+}
+function evLine(e){
+  if(e.type==='BUY'||e.type==='BUY_CROSS') return `${e.date} 점검 · 크레마지수 ${f(e.score,1)}점 → 모아둔 현금으로 매수 검토`;
+  if(e.type==='SELL') return `${e.date} 주 · 주간 RSI ${f(e.rsi,1)}로 매도선 도달 (알람 시작 ${e.start}) → 매도, 레버리지는 전량`;
+  if(e.type==='ALARM_ON') return `${e.date} 주 · 주간 RSI ${f(e.rsi,1)} 과열 지속 → 아직 팔지 않고 경계`;
+  return `${e.start}에 켜진 알람이 기한 안에 매도선에 닿지 않아 해제`;
+}
+function openModal(){
+  const items=recent(); let h='';
+  if(items.length){ h+=`<div class="sub" style="margin-bottom:4px"><b style="color:var(--ink)">최근 ${D.popup_days}일 신호 ${items.length}건</b></div>`;
+    items.forEach(([a,n,e])=>{const [l,c]=KIND[e.type]; h+=`<div class="ev" style="border-color:${c}"><b style="color:${c}">${n} ${l}</b>${a<=D.popup_new_days?' <span class="pill p-sell">NEW</span>':''}<div>${evLine(e)}</div></div>`;});
+  } else h+=`<div class="ev" style="border-color:${C.buy}">최근 ${D.popup_days}일 동안 새 신호가 없습니다.</div>`;
+  h+=`<div style="margin-top:14px;font-weight:700">현재 상태</div>`;
+  D.indices.forEach(x=>{const s=x.snap; const extra = s.alarm_start&&s.sell_price ? ` · 이번 주 종가 ${f(s.sell_price)} 아래 마감 시 매도` : '';
+    h+=`<div class="kv"><span>${x.name}</span><span>크레마지수 ${f(s.score,1)} ${pill(s.buy_status)} &nbsp; 주간 RSI ${f(s.rsi_w,1)} ${pill(s.sell_status)}${extra}</span></div>`;});
+  $('mbody').innerHTML=h; $('modal').style.display='flex';
+}
+const closeModal=()=>$('modal').style.display='none';
+$('mx').onclick=closeModal; $('mok').onclick=closeModal; $('modal').onclick=e=>{if(e.target.id==='modal')closeModal()};
+$('bellBtn').onclick=openModal;
+
+function start(data){
+  D=data; $('login').style.display='none'; $('app').style.display='block';
+  $('meta').textContent=`데이터 기준 ${D.indices.map(x=>x.snap.asof).sort().pop()} · 계산 ${D.generated} (KST, 매일 아침 자동 갱신)`;
+  $('notes').textContent=D.notes.length?'참고: '+D.notes.join(' · '):'';
+  const nNew=recent().filter(r=>r[0]<=D.popup_new_days).length;
+  $('bellBtn').textContent=nNew?`알림 ${nNew}`:'알림'; if(nNew)$('bellBtn').classList.add('primary');
+  $('minis').innerHTML=D.indices.map(x=>{const s=x.snap;return `<div class="card mini"><b>${x.name}</b> <span class="sub">${s.ticker}</span>
+    <div class="row"><div><div class="sub">크레마지수</div><div class="v">${f(s.score,1)}</div>${pill(s.buy_status)}</div>
+    <div><div class="sub">주간 RSI</div><div class="v">${f(s.rsi_w,1)}</div>${pill(s.sell_status)}</div></div></div>`}).join('');
+  $('seg').innerHTML=D.indices.map((x,i)=>`<button data-i="${i}">${x.name}</button>`).join('');
+  $('seg').querySelectorAll('button').forEach(b=>b.onclick=()=>show(+b.dataset.i));
+  $('ranges').innerHTML=[['1년',52],['5년',260],['10년',520],['전체',99999]].map(([t,r])=>`<button class="btn" data-r="${r}">${t}</button>`).join('');
+  $('ranges').querySelectorAll('button').forEach(b=>b.onclick=()=>{range=+b.dataset.r;drawCharts()});
+  $('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{$('tabs').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));['chart','log','help'].forEach(t=>$('t-'+t).classList.toggle('hide',t!==b.dataset.t))});
+  const R=D.rules;
+  $('help').innerHTML=`<b>매수 (크레마지수)</b> — 6개 지표를 0~100점으로 바꿔 가중평균합니다. 높을수록 쌉니다. 매월 ${D.buy_check_day}일 기준 점수가 기준점수 이상이면 모아둔 현금으로 매수합니다. 점수가 낮다고 팔지는 않습니다.<br><br>
+  <b>매도 (주간 RSI)</b> — 주간 RSI가 ${R.alarm_rsi} 이상을 ${R.alarm_weeks}주 유지하면 알람이 켜집니다. 알람 후 ${R.alarm_months}개월 안에 ${R.sell_rsi} 이하로 내려오면 그 주에 매도(레버리지는 전량), 못 내려오면 알람 해제입니다.<br><br>
+  <b>알림</b> — 페이지를 열면 최근 ${D.popup_days}일 안의 신호와 현재 상태가 팝업으로 뜹니다(${D.popup_new_days}일 이내는 NEW). 오른쪽 위 '알림' 버튼으로 다시 볼 수 있습니다.<br><br>
+  <b>갱신</b> — 매일 아침 7시 30분경(한국시간) 전날 미국 종가로 자동 계산됩니다. 주간 봉은 금요일 종가 기준(Yahoo 차트는 월요일 날짜로 표시)입니다.`;
+  show(D.indices.length-1); openModal();
+}
+
+function show(i){
+  cur=D.indices[i]; const s=cur.snap, R=D.rules;
+  $('seg').querySelectorAll('button').forEach((b,j)=>b.classList.toggle('on',j===i));
+  $('buyPill').innerHTML=pill(s.buy_status); $('sellPill').innerHTML=pill(s.sell_status);
+  const th=s.threshold;
+  $('g1').innerHTML=gauge(s.score,[[0,R.avg_score,C.sell],[R.avg_score,th,C.warn],[th,100,C.buy]],th,'0 비쌈 · 100 쌈');
+  const gap=th-s.score;
+  $('buyInfo').innerHTML=`<p class="note">${gap<=0?`기준점수 ${th}점 <b>도달</b> — 월 점검일에 모아둔 현금으로 매수 검토`:`기준점수 ${th}점까지 <b>${Math.max(gap,0.1).toFixed(1)}점</b> 남음`}</p>
+    <div class="kv"><span>30년 평균</span><span>${R.avg_score}점</span></div><div class="kv"><span>매수 점검일</span><span>매월 ${D.buy_check_day}일</span></div>`;
+  $('g2').innerHTML=gauge(s.rsi_w,[[0,R.sell_rsi,C.sell],[R.sell_rsi,R.alarm_rsi,C.muted],[R.alarm_rsi,100,C.warn]],R.sell_rsi,`확정 ${s.week_label} 주 · 잠정 ${f(s.rsi_w_prov,1)}`);
+  if(s.alarm_start){
+    $('sellInfo').innerHTML=`<p class="note">${s.sell_price?`이번 주 종가 <b>${f(s.sell_price)}</b> 아래 마감 시 매도 (${pct(s.sell_price/s.close-1)})`:'매도선 계산 불가'}</p>
+      <div class="kv"><span>알람 시작</span><span>${s.alarm_start}</span></div><div class="kv"><span>알람 기한</span><span>${s.alarm_expiry}</span></div>
+      <div class="kv"><span>매도선(${R.sell_rsi})까지</span><span>${s.gap_to_sell>=0?'+':''}${f(s.gap_to_sell,1)}</span></div>`;
+  } else {
+    const last=cur.events.filter(e=>e.type==='SELL').pop();
+    $('sellInfo').innerHTML=`<p class="note">${s.alarm_price?`이번 주 종가 ${f(s.alarm_price)} 이상이면 과열 구간 진입 (${pct(s.alarm_price/s.close-1)})`:`알람 없음 — 주간 RSI ${R.alarm_rsi} 이상 ${R.alarm_weeks}주 유지 시 알람`}</p>
+      <div class="kv"><span>최근 매도 신호</span><span>${last?last.date:'-'}</span></div><div class="kv"><span>알람 유효기간</span><span>${R.alarm_months}개월</span></div>`;
+  }
+  const raw={ytd_dd:pct(s.ytd_dd), rsi_w:f(s.rsi_w_prov,1), rsi_d:f(s.rsi_d,1), vix_dev:pct(s.vix_dev), dist200:pct(s.dist200), fg:f(s.fg,0)+(s.fg_fallback?' (대체)':'')};
+  $('tiles').innerHTML=D.axes.map(([k,l],j)=>{const sc=s.scores[k]??0,c=sc>=60?C.buy:sc>=31?C.warn:C.sell;
+    return `<div class="tile"><div class="tl"><span>${l}</span><span>${Math.round(R.weights[j]*100)}%</span></div><div class="tv">${raw[k]}</div><div class="bar"><i style="width:${sc}%;background:${c}"></i></div><div class="ts">${f(sc,0)}점</div></div>`}).join('');
+  $('raw').textContent=`종가 ${f(s.close)} · 연중 고점 ${f(s.ytd_high)} · 200일선 ${f(s.ma200)} · ${s.vol_ticker} ${f(s.vix)} (평소 ${f(s.vix_normal)}) · 타일 아래 숫자는 축별 점수`;
+  drawLog(); drawCharts();
+}
+
+function drawLog(){
+  const w=cur.w, last=w.close[w.close.length-1], nm={BUY:'매수 신호',BUY_CROSS:'매수 신호',ALARM_ON:'매도 알람 켜짐',SELL:'매도 신호',ALARM_EXPIRED:'알람 해제'};
+  const idx=Object.fromEntries(w.date.map((d,i)=>[d,i]));
+  const rows=cur.events.slice().reverse().map(e=>{let after='';
+    if(e.type==='SELL'&&idx[e.week]!=null){const a=idx[e.week],seg=w.close.slice(a,a+105).filter(v=>v!=null);if(seg.length>1)after='이후 최대 '+pct(Math.min(...seg)/e.price-1)}
+    else if(e.type==='BUY'&&e.price) after='현재까지 '+pct(last/e.price-1);
+    return `<tr><td>${e.date}</td><td>${pill(nm[e.type])}</td><td class="hide-m">${e.score!=null?'크레마지수 '+f(e.score,1):'주간 RSI '+f(e.rsi,1)}</td><td class="r">${f(e.price)}</td><td class="r">${after}</td></tr>`}).join('');
+  $('log').innerHTML=`<tr><th>날짜</th><th>신호</th><th class="hide-m">내용</th><th class="r">가격</th><th class="r">이후 흐름</th></tr>`+rows;
+}
+
+const shade={id:'shade',beforeDatasetsDraw(ch,_,o){if(!o.spans)return;const {ctx,chartArea:a,scales:{x}}=ch;ctx.save();ctx.fillStyle='rgba(217,138,0,.12)';
+  o.spans.forEach(([s,e])=>{const i=o.labels.findIndex(d=>d>=s),j=o.labels.findLastIndex(d=>d<=e);if(i<0||j<0||j<i)return;const x1=x.getPixelForValue(i),x2=x.getPixelForValue(j);ctx.fillRect(x1,a.top,Math.max(x2-x1,2),a.bottom-a.top)});ctx.restore()}};
+const hline=(n,v,c,dash=[5,4])=>({label:n,data:null,_v:v,borderColor:c,borderDash:dash,borderWidth:1,pointRadius:0});
+function drawCharts(){
+  $('ranges').querySelectorAll('button').forEach(b=>b.classList.toggle('primary',+b.dataset.r===range));
+  const w=cur.w,n=w.date.length,a=Math.max(0,n-range),sl=k=>w[k].slice(a),L=sl('date'),R=D.rules;
+  const css=getComputedStyle(document.documentElement), ink=css.getPropertyValue('--sub').trim(), grid=css.getPropertyValue('--line').trim(), main=css.getPropertyValue('--ink').trim();
+  const flat=v=>Array(L.length).fill(v);
+  const base=(spans,y)=>({responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
+    plugins:{legend:{labels:{color:ink,boxWidth:10,font:{size:11}}},shade:{spans,labels:L},tooltip:{filter:i=>i.raw!=null}},
+    scales:{x:{ticks:{color:ink,maxTicksLimit:7,maxRotation:0},grid:{color:grid}},y:{ticks:{color:ink},grid:{color:grid},...(y||{})}},elements:{point:{radius:0}}});
+  const mk=(id,cfg)=>{charts[id]&&charts[id].destroy();charts[id]=new Chart($(id),{...cfg,plugins:[shade]})};
+  const mark=t=>L.map(d=>{const e=cur.events.find(e=>e.week===d&&e.type===t);return e?(e.price??null):null});
+  mk('cPrice',{type:'line',data:{labels:L,datasets:[
+    {label:'종가',data:sl('close'),borderColor:main,borderWidth:1.5},
+    {label:'200일선',data:sl('ma200'),borderColor:C.muted,borderWidth:1,borderDash:[4,3]},
+    {label:'매수 신호',data:mark('BUY'),showLine:false,pointRadius:4.5,pointBackgroundColor:C.buy,borderColor:C.buy},
+    {label:'매도 알람',data:mark('ALARM_ON'),showLine:false,pointRadius:6,pointStyle:'triangle',pointBackgroundColor:C.warn,borderColor:C.warn},
+    {label:'매도 신호',data:mark('SELL'),showLine:false,pointRadius:6.5,pointStyle:'rectRot',pointBackgroundColor:C.sell,borderColor:C.sell}]},options:base(cur.spans)});
+  mk('cScore',{type:'line',data:{labels:L,datasets:[
+    {label:'크레마지수',data:sl('score'),borderColor:C.buy,borderWidth:1.4},
+    {label:'매수 기준',data:flat(cur.snap.threshold),borderColor:C.blue,borderDash:[5,4],borderWidth:1},
+    {label:'30년 평균',data:flat(R.avg_score),borderColor:C.muted,borderDash:[2,3],borderWidth:1}]},options:{...base(null,{min:0,max:100}),plugins:{...base(null).plugins,legend:{display:false}}}});
+  mk('cRsi',{type:'line',data:{labels:L,datasets:[
+    {label:'주간 RSI',data:sl('rsi'),borderColor:'#5b6ee1',borderWidth:1.4},
+    {label:'알람',data:flat(R.alarm_rsi),borderColor:C.sell,borderDash:[5,4],borderWidth:1},
+    {label:'매도',data:flat(R.sell_rsi),borderColor:C.warn,borderDash:[5,4],borderWidth:1}]},options:{...base(cur.spans,{min:0,max:100}),plugins:{...base(cur.spans).plugins,legend:{display:false}}}});
+}
+</script>
+</body>
+</html>
