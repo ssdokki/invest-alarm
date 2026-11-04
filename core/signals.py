@@ -62,14 +62,38 @@ def us_market_state(now_utc: datetime | None = None):
     return now, open_
 
 
-def week_complete(label: pd.Timestamp, now_et: datetime) -> bool:
-    """금요일 라벨 주봉이 마감됐는지 (미국 동부 금요일 16:15 이후)."""
+KST = ZoneInfo("Asia/Seoul")
+
+
+def is_korean(ticker: str) -> bool:
+    return ticker.endswith((".KS", ".KQ")) or ticker.startswith(("^KS", "^KQ"))
+
+
+def kr_market_state(now_utc: datetime | None = None):
+    now = (now_utc or datetime.now(tz=ZoneInfo("UTC"))).astimezone(KST)
+    return now.weekday() < 5 and time(9, 0) <= now.time() < time(15, 30)
+
+
+def week_complete(label: pd.Timestamp, now_et: datetime, korean: bool = False) -> bool:
+    """금요일 라벨 주봉이 마감됐는지 (미국: 동부 금요일 16:15 이후, 한국: 금요일 15:45 이후)."""
+    if korean:
+        return now_et >= datetime.combine(label.date(), time(15, 45), tzinfo=KST)
     end = datetime.combine(label.date(), time(16, 15), tzinfo=ET)
     return now_et >= end
 
 
+def pct_rank(s: pd.Series, window: int = 2520, min_periods: int = 504) -> pd.Series:
+    """자기 과거(기본 10년) 안에서의 백분위 0~100."""
+    return s.rolling(window, min_periods=min_periods).rank(pct=True) * 100
+
+
 def compute(name, close, vol, fg, rules, cfg, now_utc=None) -> dict:
     now_et, market_open = us_market_state(now_utc)
+    ticker = cfg.indices[name]
+    korean = is_korean(ticker)
+    mode = getattr(cfg, "modes", {}).get(name, "absolute")
+    if korean:
+        market_open = kr_market_state(now_utc)
     close = close.sort_index()
     idx = close.index
 
@@ -77,7 +101,7 @@ def compute(name, close, vol, fg, rules, cfg, now_utc=None) -> dict:
     weekly = close.resample("W-FRI").last().dropna()
     w_rsi, w_ag, w_al = wilder(weekly)
     w = pd.DataFrame({"close": weekly, "rsi": w_rsi, "ag": w_ag, "al": w_al})
-    w["complete"] = [week_complete(t, now_et) for t in w.index]
+    w["complete"] = [week_complete(t, now_et, korean) for t in w.index]
     wc = w[w["complete"]]
 
     # ── 일별 지표
@@ -98,6 +122,9 @@ def compute(name, close, vol, fg, rules, cfg, now_utc=None) -> dict:
         d["rsi_w"] = np.where(l2 == 0, 100.0, 100 - 100 / (1 + g2 / l2))
     d.loc[np.isnan(g2), "rsi_w"] = np.nan
 
+    if vol is None or mode == "relative":
+        # 종목 자체 변동성: 최근 20일 일간 수익률 표준편차(연율, %)
+        vol = np.log(close).diff().rolling(20).std() * np.sqrt(252) * 100
     vol = vol.sort_index()
     d["vix"] = vol.reindex(idx, method="ffill")
     d["vix_normal"] = vol.rolling(cfg.vix_normal_days).mean().reindex(idx, method="ffill")
@@ -111,7 +138,12 @@ def compute(name, close, vol, fg, rules, cfg, now_utc=None) -> dict:
 
     cols = ["ytd_dd", "rsi_w", "rsi_d", "vix_dev", "dist200", "fg"]
     for i, c in enumerate(cols):
-        d[f"s_{c}"] = lin_score(d[c], rules["lo"][i], rules["hi"][i])
+        if mode == "relative" and c in ("ytd_dd", "dist200"):
+            d[f"s_{c}"] = 100 - pct_rank(d[c])        # 자기 과거 대비 많이 빠졌을수록 높은 점수
+        elif mode == "relative" and c == "vix_dev":
+            d[f"s_{c}"] = pct_rank(d[c])              # 자기 과거 대비 변동성이 클수록 높은 점수
+        else:
+            d[f"s_{c}"] = lin_score(d[c], rules["lo"][i], rules["hi"][i])
     wts = np.array(rules["weights"], dtype=float)
     sc = d[[f"s_{c}" for c in cols]].to_numpy()
     d["score"] = (sc * wts).sum(axis=1) / wts.sum()
@@ -144,6 +176,7 @@ def compute(name, close, vol, fg, rules, cfg, now_utc=None) -> dict:
 
     # ── 매수 신호: 매월 점검일
     th = rules["buy_threshold"].get(name, 60)
+    avg = rules["avg_score"] if mode == "absolute" else round(float(d["score"].mean()), 0)
     first = d["score"].first_valid_index()
     today = now_et.date()
     if first is not None:
@@ -172,20 +205,21 @@ def compute(name, close, vol, fg, rules, cfg, now_utc=None) -> dict:
     lc = wc.iloc[-1] if len(wc) else None
     expiry = (alarm_start + pd.DateOffset(months=rules["alarm_months"])).normalize() if alarm_start is not None else None
     snap = dict(
-        index=name, ticker=cfg.indices[name], vol_ticker=cfg.vol_index[name],
+        index=name, ticker=ticker, vol_ticker=cfg.vol_index.get(name) if mode == "absolute" else "자체 변동성",
+        mode=mode, market="KR" if korean else "US",
         asof=d.index[-1], market_open=market_open, now_et=now_et,
         close=last["close"], ytd_high=last["ytd_high"], ytd_dd=last["ytd_dd"],
         ma200=last["ma200"], dist200=last["dist200"], rsi_d=last["rsi_d"],
         rsi_w_prov=last["rsi_w"], vix=last["vix"], vix_normal=last["vix_normal"], vix_dev=last["vix_dev"],
         fg=last["fg"], fg_fallback=bool(last["fg_fallback"]),
         scores={c: float(last[f"s_{c}"]) for c in cols}, score=float(last["score"]),
-        threshold=th, avg_score=rules["avg_score"],
+        threshold=th, avg_score=avg,
         week_label=lc.name if lc is not None else None,
         rsi_w=float(lc["rsi"]) if lc is not None else np.nan,
         alarm_start=alarm_start, alarm_expiry=expiry,
     )
     sc_ = snap["score"]
-    snap["buy_status"] = "매수 구간" if sc_ >= th else ("비쌈 (추가 매수 비추천)" if sc_ < rules["avg_score"] else "대기")
+    snap["buy_status"] = "매수 구간" if sc_ >= th else ("비쌈 (추가 매수 비추천)" if sc_ < avg else "대기")
     if alarm_start is None:
         snap["sell_status"] = "알람 없음"
         snap["sell_price"] = None
