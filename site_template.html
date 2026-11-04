@@ -101,7 +101,7 @@ td.r,th.r{text-align:right}
   <div class="sub" id="raw"></div>
 
   <div class="tabs" id="tabs">
-    <button data-t="chart" class="on">차트</button><button data-t="log">신호 기록</button><button data-t="help">안내</button>
+    <button data-t="chart" class="on">차트</button><button data-t="log">신호 기록</button><button data-t="fg">공포탐욕지수</button><button data-t="help">안내</button>
   </div>
   <section id="t-chart">
     <div class="ranges" id="ranges"></div>
@@ -113,6 +113,8 @@ td.r,th.r{text-align:right}
     <div class="sub" style="margin-top:8px">주황 음영 = 매도 알람이 켜져 있던 기간 · 주간 봉은 금요일 종가 기준</div>
   </section>
   <section id="t-log" class="hide"><div class="card"><table id="log"></table></div></section>
+  <section id="t-fg" class="hide"><div class="card" id="fgBox" style="line-height:1.7"></div>
+    <div class="card" id="fgChartCard" style="margin-top:14px"><div class="sub" style="margin-bottom:6px">CNN 원본 vs 자체 계산 (겹치는 기간)</div><div class="chart sm"><canvas id="cFg"></canvas></div></div></section>
   <section id="t-help" class="hide"><div class="card" id="help" style="line-height:1.7"></div></section>
   <div class="foot">테스프레소 크레마지수·매도알람 규칙을 매일 아침 자동 계산한 결과입니다. 투자 권유가 아니며 판단과 책임은 본인에게 있습니다. 데이터: Yahoo Finance, CNN.</div>
 </div>
@@ -216,7 +218,7 @@ function start(data){
   $('seg').querySelectorAll('button').forEach(b=>b.onclick=()=>show(+b.dataset.i));
   $('ranges').innerHTML=[['1년',52],['5년',260],['10년',520],['전체',99999]].map(([t,r])=>`<button class="btn" data-r="${r}">${t}</button>`).join('');
   $('ranges').querySelectorAll('button').forEach(b=>b.onclick=()=>{range=+b.dataset.r;drawCharts()});
-  $('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{$('tabs').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));['chart','log','help'].forEach(t=>$('t-'+t).classList.toggle('hide',t!==b.dataset.t))});
+  $('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{$('tabs').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));['chart','log','fg','help'].forEach(t=>$('t-'+t).classList.toggle('hide',t!==b.dataset.t));if(b.dataset.t==='fg')drawFg()});
   const R=D.rules;
   $('help').innerHTML=`<b>매수 (크레마지수)</b> — 6개 지표를 0~100점으로 바꿔 가중평균합니다. 높을수록 쌉니다. 매월 ${D.buy_check_day}일 기준 점수가 기준점수 이상이면 모아둔 현금으로 매수합니다. 점수가 낮다고 팔지는 않습니다.<br><br>
   <b>매도 (주간 RSI)</b> — 주간 RSI가 ${R.alarm_rsi} 이상을 ${R.alarm_weeks}주 유지하면 알람이 켜집니다. 알람 후 ${R.alarm_months}개월 안에 ${R.sell_rsi} 이하로 내려오면 그 주에 매도(레버리지는 전량), 못 내려오면 알람 해제입니다.<br><br>
@@ -244,11 +246,34 @@ function show(i){
     $('sellInfo').innerHTML=`<p class="note">${s.alarm_price?`이번 주 종가 ${f(s.alarm_price)} 이상이면 과열 구간 진입 (${pct(s.alarm_price/s.close-1)})`:`알람 없음 — 주간 RSI ${R.alarm_rsi} 이상 ${R.alarm_weeks}주 유지 시 알람`}</p>
       <div class="kv"><span>최근 매도 신호</span><span>${last?last.date:'-'}</span></div><div class="kv"><span>알람 유효기간</span><span>${R.alarm_months}개월</span></div>`;
   }
-  const raw={ytd_dd:pct(s.ytd_dd), rsi_w:f(s.rsi_w_prov,1), rsi_d:f(s.rsi_d,1), vix_dev:pct(s.vix_dev), dist200:pct(s.dist200), fg:f(s.fg,0)+(s.fg_fallback?' (대체)':'')};
+  const raw={ytd_dd:pct(s.ytd_dd), rsi_w:f(s.rsi_w_prov,1), rsi_d:f(s.rsi_d,1), vix_dev:pct(s.vix_dev), dist200:pct(s.dist200), fg:f(s.fg,0)+(s.fg_src==='자체 계산'?' (자체)':'')};
   $('tiles').innerHTML=D.axes.map(([k,l],j)=>{const sc=s.scores[k]??0,c=sc>=60?C.buy:sc>=31?C.warn:C.sell;
     return `<div class="tile"><div class="tl"><span>${l}</span><span>${Math.round(R.weights[j]*100)}%</span></div><div class="tv">${raw[k]}</div><div class="bar"><i style="width:${sc}%;background:${c}"></i></div><div class="ts">${f(sc,0)}점</div></div>`}).join('');
   $('raw').textContent=`종가 ${f(s.close)} · 연중 고점 ${f(s.ytd_high)} · 200일선 ${f(s.ma200)} · ${s.vol_ticker} ${f(s.vix)} (평소 ${f(s.vix_normal)}) · 타일 아래 숫자는 축별 점수`;
   drawLog(); drawCharts();
+}
+
+function drawFg(){
+  const g=D.fg||{}, c=g.compare, s=cur.snap;
+  const comp=Object.entries(g.components||{}).map(([k,v])=>`<div class="kv"><span>${k}</span><span>${v==null?'-':f(v,0)+'점'}</span></div>`).join('');
+  let h=`<b>지금 쓰는 값</b>: ${f(s.fg,0)} (${s.fg_src==='CNN'?'CNN 원본':'자체 계산'})<br>
+    <span class="sub">상태: ${g.status||'-'} · 자체 계산 최근값 ${f(g.proxy_last,1)}</span><br><br>
+    <b>원칙</b> — CNN 값을 받을 수 있는 날은 CNN 원본을 쓰고, 받지 못한 날(그리고 CNN 이력이 없는 과거)은 CNN 방식을 따라 직접 계산한 값을 씁니다.
+    자체 계산은 CNN의 7개 지표 중 무료 데이터로 구할 수 있는 6개(풋콜 비율 제외)를 Yahoo 데이터로 근사해, 각각 최근 1년 대비 백분위로 바꾼 뒤 평균냅니다.<br><br>
+    <b>자체 계산 구성요소 (오늘)</b>${comp}<br>`;
+  if(c){ h+=`<b>CNN 원본과 비교</b> (${c.start} ~ ${c.end}, ${c.days}일)
+    <div class="kv"><span>상관계수</span><span>${c.corr}</span></div>
+    <div class="kv"><span>평균 차이</span><span>${c.mae}점</span></div>
+    <div class="kv"><span>같은 구간(극공포·공포·중립·탐욕·극탐욕) 비율</span><span>${Math.round(c.same_zone*100)}%</span></div>
+    <div class="kv"><span>최근 값</span><span>CNN ${c.last_cnn} / 자체 ${c.last_proxy}</span></div>`; $('fgChartCard').style.display='';}
+  else { h+=`<b>CNN 원본과 비교</b>: 아직 CNN 데이터가 쌓이지 않아 비교할 수 없습니다. CNN 값을 받는 날마다 기록이 쌓이면 자동으로 표시됩니다.`; $('fgChartCard').style.display='none';}
+  $('fgBox').innerHTML=h;
+  if(c){ charts.cFg&&charts.cFg.destroy(); const ink=getComputedStyle(document.documentElement).getPropertyValue('--sub').trim();
+    charts.cFg=new Chart($('cFg'),{type:'line',data:{labels:c.series.date,datasets:[
+      {label:'CNN',data:c.series.cnn,borderColor:'#d98a00',borderWidth:1.4,pointRadius:0},
+      {label:'자체 계산',data:c.series.proxy,borderColor:'#2f6fb2',borderWidth:1.4,pointRadius:0}]},
+      options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{labels:{color:ink,boxWidth:10}}},scales:{x:{ticks:{color:ink,maxTicksLimit:6,maxRotation:0}},y:{min:0,max:100,ticks:{color:ink}}}}}); }
 }
 
 function drawLog(){
