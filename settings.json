@@ -1,11 +1,16 @@
 {
   "indices": {
     "S&P500": "SPY",
-    "나스닥100": "QQQ"
+    "나스닥100": "QQQ",
+    "다우지수": "DIA",
+    "코스피": "^KS11",
+    "삼성전자": "005930.KS",
+    "SK하이닉스": "000660.KS"
   },
   "vol_index": {
     "S&P500": "^VIX",
-    "나스닥100": "^VIX"
+    "나스닥100": "^VIX",
+    "다우지수": "^VIX"
   },
   "vix_normal_days": 252,
   "fg_fallback": 50,
@@ -38,7 +43,11 @@
     ],
     "buy_threshold": {
       "S&P500": 60,
-      "나스닥100": 60
+      "나스닥100": 60,
+      "다우지수": 60,
+      "코스피": 60,
+      "삼성전자": 60,
+      "SK하이닉스": 60
     },
     "avg_score": 31,
     "alarm_rsi": 72,
@@ -47,5 +56,11 @@
     "sell_rsi": 50
   },
   "popup_days": 30,
-  "popup_new_days": 7
+  "popup_new_days": 7,
+  "modes": {
+    "코스피": "relative",
+    "삼성전자": "relative",
+    "SK하이닉스": "relative"
+  },
+  "default_view": "나스닥100"
 }
