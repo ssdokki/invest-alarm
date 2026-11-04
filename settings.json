@@ -1,23 +1,51 @@
 {
-  "indices": {"S&P500": "SPY", "나스닥100": "QQQ"},
-  "vol_index": {"S&P500": "^VIX", "나스닥100": "^VIX"},
+  "indices": {
+    "S&P500": "SPY",
+    "나스닥100": "QQQ"
+  },
+  "vol_index": {
+    "S&P500": "^VIX",
+    "나스닥100": "^VIX"
+  },
   "vix_normal_days": 252,
   "fg_fallback": 50,
   "buy_check_day": 1,
   "buy_daily_alert": false,
-  "mail_to": "ssdokki@gmail.com",
-  "mail_from": "ssdokki@gmail.com",
-  "weekly_report": true,
-  "catchup_days": 30,
   "rules": {
-    "weights": [0.30, 0.20, 0.10, 0.15, 0.15, 0.10],
-    "lo": [0.0, 70, 70, -0.10, 0.12, 100],
-    "hi": [-0.12, 30, 30, 0.40, -0.12, 0],
-    "buy_threshold": {"S&P500": 60, "나스닥100": 60},
+    "weights": [
+      0.3,
+      0.2,
+      0.1,
+      0.15,
+      0.15,
+      0.1
+    ],
+    "lo": [
+      0.0,
+      70,
+      70,
+      -0.1,
+      0.12,
+      100
+    ],
+    "hi": [
+      -0.12,
+      30,
+      30,
+      0.4,
+      -0.12,
+      0
+    ],
+    "buy_threshold": {
+      "S&P500": 60,
+      "나스닥100": 60
+    },
     "avg_score": 31,
     "alarm_rsi": 72,
     "alarm_weeks": 2,
     "alarm_months": 18,
     "sell_rsi": 50
-  }
+  },
+  "popup_days": 30,
+  "popup_new_days": 7
 }
