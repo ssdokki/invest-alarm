@@ -86,7 +86,7 @@ if not password_ok():
 @st.cache_data(ttl=1800, show_spinner="최신 데이터를 받아 계산하는 중…")
 def load_market(test: bool):
     cfg = load()
-    closes, fg, notes = data.load_all(cfg, test=test)
+    closes, fg, notes, _ = data.load_all(cfg, test=test)
     return closes, fg, notes, datetime.now(ZoneInfo("Asia/Seoul"))
 
 
