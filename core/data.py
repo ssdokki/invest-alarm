@@ -135,6 +135,10 @@ def synthetic(seed: int = 7) -> dict:
     out["HYG"] = S(out["LQD"].values * np.exp(np.cumsum(ret.values * 0.3 + rng.normal(0, 0.002, n))))
     vix = (15 + (-ret.rolling(20).sum().fillna(0)) * 120).clip(9, 80)
     out["^VIX"], out["^VXN"] = vix, vix * 1.2
+    out["DIA"] = walk(0.0003, 0.010, 90)
+    out["^KS11"] = walk(0.0002, 0.012, 800)
+    out["005930.KS"] = walk(0.0004, 0.019, 9000)
+    out["000660.KS"] = walk(0.0005, 0.027, 20000)
     fg = (50 + ret.rolling(30).sum().fillna(0) * 400).clip(1, 99)
     out["fear_greed"] = fg[fg.index >= pd.Timestamp.now() - pd.Timedelta(days=360)]
     return out
