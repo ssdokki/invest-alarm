@@ -1,21 +1,21 @@
-"""데이터 수집: Yahoo Finance(가격·VIX), CNN(공포탐욕지수).
+"""데이터 수집: Yahoo Finance(가격·VIX·채권 ETF), CNN(공포탐욕지수).
 
-받은 공포탐욕지수는 data/fear_greed.csv에 누적 저장합니다(클라우드 알람 작업이 매일 커밋).
-CNN이 클라우드 서버 접속을 막는 경우가 있어, 그때는 이 저장본을 씁니다.
+공포탐욕지수는 CNN 값을 우선 쓰고, 받지 못한 날은 CNN 방식으로 직접 계산한 값(core/feargreed.py)으로 채웁니다.
+CNN에서 받은 값은 data/fear_greed.csv에 누적 저장합니다(매일 작업이 저장소에 커밋).
 """
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
 
+from . import feargreed
 from .settings import DATA
 
 log = logging.getLogger("alarm")
-CNN_URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{start}"
-UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
+CNN_BASE = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+CNN_HEADERS = {"User-Agent": "invest-alarm/1.0 (personal dashboard)", "Accept": "application/json"}
 
 
 def _path(name):
@@ -30,7 +30,7 @@ def _load(name):
     return pd.read_csv(p, parse_dates=["date"], index_col="date")["value"].astype(float)
 
 
-def fetch_close(ticker: str, save: bool = False) -> tuple[pd.Series, str]:
+def fetch_close(ticker: str) -> tuple[pd.Series, str]:
     last_err = None
     for attempt in range(3):
         try:
@@ -41,61 +41,73 @@ def fetch_close(ticker: str, save: bool = False) -> tuple[pd.Series, str]:
             s = h["Close"].copy()
             s.index = pd.to_datetime(s.index).tz_localize(None).normalize()
             s = s[~s.index.duplicated(keep="last")].dropna()
-            if save:
-                s.rename("value").to_csv(_path(ticker), index_label="date")
             return s, "Yahoo Finance"
         except Exception as e:
             last_err = e
             time.sleep(2 * (attempt + 1))
-    cached = _load(ticker)
-    if cached is not None:
-        return cached, f"저장본({cached.index[-1].date()}까지)"
     raise RuntimeError(f"{ticker} 데이터를 받지 못했습니다: {last_err}")
 
 
-def fetch_fear_greed(save: bool = False) -> tuple[pd.Series | None, str]:
+def _parse_cnn(js) -> pd.Series:
+    s = pd.Series({pd.to_datetime(d["x"], unit="ms").normalize(): float(d["y"])
+                   for d in js["fear_and_greed_historical"]["data"]})
+    now = js.get("fear_and_greed", {})
+    if "score" in now and "timestamp" in now:
+        s.loc[pd.to_datetime(now["timestamp"]).tz_localize(None).normalize()] = float(now["score"])
+    return s[~s.index.duplicated(keep="last")].sort_index()
+
+
+def fetch_cnn(save: bool = False) -> tuple[pd.Series | None, str]:
+    """CNN 공포탐욕지수. 성공하면 기존 저장본과 합쳐 반환. (시리즈, 상태 문구)"""
+    import requests
     old = _load("fear_greed")
-    try:
-        import requests
-        r = requests.get(CNN_URL.format(start="2011-01-01"), headers=UA, timeout=20)
-        r.raise_for_status()
-        js = r.json()
-        s = pd.Series({pd.to_datetime(d["x"], unit="ms").normalize(): float(d["y"])
-                       for d in js["fear_and_greed_historical"]["data"]}).sort_index()
-        now = js.get("fear_and_greed", {})
-        if "score" in now and "timestamp" in now:
-            s.loc[pd.to_datetime(now["timestamp"]).tz_localize(None).normalize()] = float(now["score"])
-        s = s[~s.index.duplicated(keep="last")]
-        if old is not None:
-            s = pd.concat([old[~old.index.isin(s.index)], s])
-        s = s.sort_index()
-        if save:
-            s.rename("value").to_csv(_path("fear_greed"), index_label="date")
-        return s, "CNN"
-    except Exception as e:
-        if old is not None:
-            return old, f"저장본({old.index[-1].date()}까지)"
-        log.warning("공포탐욕지수 수신 실패: %s", e)
-        return None, "대체값(50)"
+    start = (datetime.utcnow() - timedelta(days=360)).strftime("%Y-%m-%d")
+    urls = [f"{CNN_BASE}/{start}", CNN_BASE, f"{CNN_BASE}/"]
+    err = None
+    for u in urls:
+        try:
+            r = requests.get(u, headers=CNN_HEADERS, timeout=20)
+            r.raise_for_status()
+            s = _parse_cnn(r.json())
+            if old is not None:
+                s = pd.concat([old[~old.index.isin(s.index)], s]).sort_index()
+            if save:
+                s.rename("value").to_csv(_path("fear_greed"), index_label="date", float_format="%.2f")
+            return s, "CNN"
+        except Exception as e:
+            err = e
+    log.warning("CNN 공포탐욕지수 수신 실패: %s", err)
+    if old is not None:
+        return old, f"CNN 수신 실패 → {old.index[-1].date()}까지 저장본 + 자체 계산"
+    return None, "CNN 수신 실패 → 자체 계산값 사용"
 
 
 def load_all(cfg, test: bool = False, save: bool = False):
-    """{티커: 시리즈}, 공포탐욕 시리즈, 알림 문구 목록."""
+    """{티커: 시리즈}, 공포탐욕 시리즈(CNN+자체계산 혼합), 알림 문구 목록, 공포탐욕 정보."""
     if test:
         syn = synthetic()
-        return {t: syn[t] for t in syn if t != "fear_greed"}, syn["fear_greed"], ["가상 데이터(테스트)"]
-    notes, closes = [], {}
-    for t in list(cfg.indices.values()) + list(cfg.vol_index.values()):
-        if t in closes:
-            continue
-        s, src = fetch_close(t)
-        closes[t] = s
-        if src != "Yahoo Finance":
-            notes.append(f"{t}: {src}")
-    fg, src = fetch_fear_greed(save=save)
-    if src != "CNN":
-        notes.append(f"공포탐욕지수: {src}")
-    return closes, fg, notes
+        closes = {t: syn[t] for t in syn if t != "fear_greed"}
+        cnn, cnn_src = syn["fear_greed"], "CNN(가상)"
+        notes = ["가상 데이터(테스트)"]
+    else:
+        notes, closes = [], {}
+        need = list(cfg.indices.values()) + list(cfg.vol_index.values()) + feargreed.PROXY_TICKERS
+        for t in dict.fromkeys(need):
+            try:
+                closes[t] = fetch_close(t)[0]
+            except Exception as e:
+                if t in feargreed.PROXY_TICKERS and t not in cfg.indices.values() and t not in cfg.vol_index.values():
+                    notes.append(f"{t} 수신 실패(공포탐욕 자체 계산에서 제외)")
+                else:
+                    raise
+        cnn, cnn_src = fetch_cnn(save=save)
+        if cnn_src != "CNN":
+            notes.append(f"공포탐욕지수: {cnn_src}")
+    proxy, comp = feargreed.proxy_index(closes)
+    fg, cnn_dates = feargreed.blend(cnn, proxy)
+    info = {"cnn_dates": cnn_dates, "proxy": proxy, "components": comp,
+            "compare": feargreed.compare(cnn, proxy), "cnn_status": cnn_src}
+    return closes, fg, notes, info
 
 
 def synthetic(seed: int = 7) -> dict:
@@ -104,18 +116,25 @@ def synthetic(seed: int = 7) -> dict:
     idx = pd.bdate_range("1999-01-01", datetime.now().strftime("%Y-%m-%d"))
     n = len(idx)
 
-    def walk(mu, sigma, p0):
+    def walk(mu, sigma, p0, shock=True):
         r = rng.normal(mu, sigma, n)
-        for pos, size, length in [(0.06, -0.9, 250), (0.38, -0.6, 120), (0.78, -0.35, 25),
-                                  (0.86, -0.4, 180), (0.96, -0.2, 20)]:
-            a = int(pos * n)
-            r[a:a + length] += size / length
+        if shock:
+            for pos, size, length in [(0.06, -0.9, 250), (0.38, -0.6, 120), (0.78, -0.35, 25),
+                                      (0.86, -0.4, 180), (0.96, -0.2, 20)]:
+                a = int(pos * n)
+                r[a:a + length] += size / length
         return pd.Series(p0 * np.exp(np.cumsum(r)), index=idx)
 
     out = {"SPY": walk(0.0004, 0.011, 120), "QQQ": walk(0.0006, 0.016, 90)}
+    out["^GSPC"] = out["SPY"] * 10
     ret = out["SPY"].pct_change().fillna(0)
+    S = lambda a: pd.Series(np.asarray(a), index=idx)
+    out["RSP"] = S(out["SPY"].values * np.exp(np.cumsum(rng.normal(0, 0.002, n))))
+    out["TLT"] = S(100 * np.exp(np.cumsum(-ret.values * 0.3 + rng.normal(0, 0.006, n))))
+    out["LQD"] = S(100 * np.exp(np.cumsum(rng.normal(0.0001, 0.003, n))))
+    out["HYG"] = S(out["LQD"].values * np.exp(np.cumsum(ret.values * 0.3 + rng.normal(0, 0.002, n))))
     vix = (15 + (-ret.rolling(20).sum().fillna(0)) * 120).clip(9, 80)
     out["^VIX"], out["^VXN"] = vix, vix * 1.2
     fg = (50 + ret.rolling(30).sum().fillna(0) * 400).clip(1, 99)
-    out["fear_greed"] = fg[fg.index >= "2011-01-01"]
+    out["fear_greed"] = fg[fg.index >= pd.Timestamp.now() - pd.Timedelta(days=360)]
     return out
