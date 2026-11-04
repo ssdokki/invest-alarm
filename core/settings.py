@@ -15,8 +15,10 @@ AXES = [  # (키, 표시 이름)
 def load(path: Path | None = None) -> SimpleNamespace:
     js = json.loads((path or ROOT / "settings.json").read_text(encoding="utf-8"))
     cfg = SimpleNamespace(**js)
+    cfg.modes = getattr(cfg, "modes", {})
     for name in cfg.indices:
-        cfg.vol_index.setdefault(name, "^VIX")
+        if cfg.modes.get(name, "absolute") == "absolute":
+            cfg.vol_index.setdefault(name, "^VIX")
     return cfg
 
 
