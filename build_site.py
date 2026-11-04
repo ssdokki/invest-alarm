@@ -89,7 +89,7 @@ def main(test=False, out="site"):
     closes, fg, notes, fginfo = data.load_all(cfg, test=test, save=not test)
     idx = []
     for name, t in cfg.indices.items():
-        r = signals.compute(name, closes[t], closes[cfg.vol_index[name]], fg, cfg.rules, cfg)
+        r = signals.compute(name, closes[t], closes.get(cfg.vol_index.get(name)), fg, cfg.rules, cfg)
         ip = index_payload(name, r)
         asof = r["snap"]["asof"]
         cnn_recent = any(abs((asof - d).days) <= 3 for d in fginfo["cnn_dates"]) if fginfo["cnn_dates"] else False
@@ -104,6 +104,7 @@ def main(test=False, out="site"):
                                              "alarm_weeks", "alarm_months", "sell_rsi")},
         "axes": [[k, label] for k, label in AXES],
         "buy_check_day": cfg.buy_check_day,
+        "default_view": getattr(cfg, "default_view", None),
         "popup_days": int(getattr(cfg, "popup_days", 30)),
         "popup_new_days": int(getattr(cfg, "popup_new_days", 7)),
         "indices": idx,
