@@ -93,7 +93,7 @@ def load_market(test: bool):
 def compute_all(cfg, closes, fg):
     out = {}
     for name, t in cfg.indices.items():
-        out[name] = signals.compute(name, closes[t], closes[cfg.vol_index[name]], fg, cfg.rules, cfg)
+        out[name] = signals.compute(name, closes[t], closes.get(cfg.vol_index.get(name)), fg, cfg.rules, cfg)
     return out
 
 
@@ -415,7 +415,7 @@ with tab_sim:
     sim_months = a4.slider("알람 유효기간(개월)", 6, 24, int(rules["alarm_months"]))
     bt = dict(rules["buy_threshold"]); bt[sel] = sim_th
     c2_ = with_rules(cfg, buy_threshold=bt, alarm_rsi=sim_alarm, sell_rsi=sim_sell, alarm_months=sim_months)
-    r2 = signals.compute(sel, closes[cfg.indices[sel]], closes[cfg.vol_index[sel]], fg, c2_.rules, c2_)
+    r2 = signals.compute(sel, closes[cfg.indices[sel]], closes.get(cfg.vol_index.get(sel)), fg, c2_.rules, c2_)
     ev2 = r2["events"]
     sells = event_table([e for e in ev2 if e["type"] == "SELL"], r2["weekly"])
     buys = [e for e in ev2 if e["type"] == "BUY"]
