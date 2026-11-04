@@ -9,7 +9,7 @@ on:
     paths: ["settings.json", "site_template.html", "build_site.py", "core/**"]
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -37,6 +37,13 @@ jobs:
         env:
           SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
         run: python build_site.py
+      - name: 공포탐욕 기록 저장
+        if: always()
+        run: |
+          git config user.name "invest-alarm-bot"
+          git config user.email "invest-alarm-bot@users.noreply.github.com"
+          git add data/fear_greed.csv 2>/dev/null || true
+          if ! git diff --cached --quiet; then git commit -m "공포탐욕 기록 $(date -u +%F)" && git push; else echo "변경 없음"; fi
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
