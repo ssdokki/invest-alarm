@@ -126,12 +126,13 @@ def main(test=False, out="site"):
         else:
             uni, uni_src = screener.load_universe()
             prices = screener.fetch_ohlcv(list(uni["code"]))
-        scr = screener.run(cfg, uni, prices)
+        scr = screener.run(cfg, uni, prices, closes.get("^KS11"))
         scr["universe_src"] = uni_src
-        if scr.get("signal"):
-            print(f"단기 스크리너({scr['asof']} 종가, {scr['universe_n']}종목): 오늘 후보 {scr['candidates_total']}개 / "
-                  f"과거 신호 {scr['signal']['n']}회 승률 {scr['signal']['win']}% 평균 {scr['signal']['mean']}% "
-                  f"(무작위 {scr['baseline']['mean']}%) → {scr.get('verdict', '')}")
+        if scr.get("best"):
+            b, bt = scr["best"], scr["baseline_test"]
+            print(f"단기 규칙 검증({scr['universe_n']}종목) 선택: {b['rule']} | 학습 {scr['train_period']} 평균 {b['train']['mean']}% "
+                  f"({b['train']['n']}회) | 검증 {scr['test_period']} 평균 {b['test']['mean'] if b['test'] else '-'}% "
+                  f"({b['test']['n'] if b['test'] else 0}회, 무작위 {bt['mean'] if bt else '-'}%) → {'통과' if scr['passed'] else '미통과'}")
     except Exception as e:
         print("단기 스크리너 실패:", e)
         scr = {"error": str(e)}
