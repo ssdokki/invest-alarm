@@ -64,9 +64,9 @@ th{color:var(--sub);font-weight:600}
 td.r,th.r{text-align:right}
 .hide{display:none}
 /* 팝업 */
-#modal{position:fixed;inset:0;background:rgba(15,20,30,.45);display:none;align-items:flex-start;justify-content:center;padding:6vh 16px;z-index:50}
-#modal .card{width:100%;max-width:720px;max-height:86vh;overflow:auto;padding:22px}
-#modal h2{margin:0 0 12px;font-size:1.3rem;display:flex;justify-content:space-between}
+#modal,#vmodal{position:fixed;inset:0;background:rgba(15,20,30,.45);display:none;align-items:flex-start;justify-content:center;padding:6vh 16px;z-index:50}
+#modal .card,#vmodal .card{width:100%;max-width:720px;max-height:86vh;overflow:auto;padding:22px}
+#modal h2,#vmodal h2{margin:0 0 12px;font-size:1.3rem;display:flex;justify-content:space-between}
 .ev{border-left:5px solid;border-radius:8px;background:var(--soft);padding:10px 14px;margin:8px 0}
 .ev b{font-size:.98rem}.ev div{font-size:.88rem;margin-top:3px}
 #mbody .kv{flex-wrap:wrap;gap:4px}
@@ -91,7 +91,7 @@ td.r,th.r{text-align:right}
 <div id="app" class="wrap">
   <div class="top">
     <div><h1>투자알람</h1><div class="sub" id="meta"></div><div class="sub" id="notes"></div></div>
-    <div class="acts"><button class="btn" id="bellBtn">알림</button><button class="btn" id="logout">잠금</button></div>
+    <div class="acts"><button class="btn" id="valBtn">단기 검증</button><button class="btn" id="bellBtn">알림</button><button class="btn" id="logout">잠금</button></div>
   </div>
   <div class="grid3" id="minis"></div>
   <div class="seg" id="seg"></div>
@@ -103,7 +103,7 @@ td.r,th.r{text-align:right}
   <div class="sub" id="raw"></div>
 
   <div class="tabs" id="tabs">
-    <button data-t="chart" class="on">차트</button><button data-t="scr">단기 스크리너</button><button data-t="log">신호 기록</button><button data-t="fg">공포탐욕지수</button><button data-t="help">안내</button>
+    <button data-t="chart" class="on">차트</button><button data-t="log">신호 기록</button><button data-t="fg">공포탐욕지수</button><button data-t="help">안내</button>
   </div>
   <section id="t-chart">
     <div class="ranges" id="ranges"></div>
@@ -114,10 +114,6 @@ td.r,th.r{text-align:right}
     </div>
     <div class="sub" style="margin-top:8px">주황 음영 = 매도 알람이 켜져 있던 기간 · 주간 봉은 금요일 종가 기준</div>
   </section>
-  <section id="t-scr" class="hide"><div class="card" id="scrHead" style="line-height:1.7"></div>
-    <div class="card" style="margin-top:14px;overflow-x:auto"><table id="scrTbl"></table></div>
-    <div class="grid2" style="margin-top:14px"><div class="card" id="scrStats"></div><div class="card" style="overflow-x:auto"><table id="scrYears"></table></div></div>
-    <div class="foot" id="scrNote"></div></section>
   <section id="t-log" class="hide"><div class="card"><table id="log"></table></div></section>
   <section id="t-fg" class="hide"><div class="card" id="fgBox" style="line-height:1.7"></div>
     <div class="card" id="fgChartCard" style="margin-top:14px"><div class="sub" style="margin-bottom:6px">CNN 원본 vs 자체 계산 (겹치는 기간)</div><div class="chart sm"><canvas id="cFg"></canvas></div></div></section>
@@ -126,6 +122,8 @@ td.r,th.r{text-align:right}
 </div>
 
 <div id="modal"><div class="card"><h2><span>알림</span><button class="btn" id="mx">✕</button></h2><div id="mbody"></div><button class="btn primary" id="mok" style="width:100%;margin-top:14px;padding:11px">확인</button></div></div>
+
+<div id="vmodal"><div class="card"><h2><span>단기(2일) 규칙 — 떼어 둔 기간 검증</span><button class="btn" id="vx">✕</button></h2><div id="vbody"></div><button class="btn primary" id="vok" style="width:100%;margin-top:14px;padding:11px">닫기</button></div></div>
 
 <script>/*__CHARTJS__*/</script>
 <script>
@@ -204,7 +202,6 @@ function openModal(){
     items.forEach(([a,n,e])=>{const [l,c]=KIND[e.type]; h+=`<div class="ev" style="border-color:${c}"><b style="color:${c}">${n} ${l}</b>${a<=D.popup_new_days?' <span class="pill p-sell">NEW</span>':''}<div>${evLine(e)}</div></div>`;});
   } else h+=`<div class="ev" style="border-color:${C.buy}">최근 ${D.popup_days}일 동안 새 신호가 없습니다.</div>`;
   h+=`<div style="margin-top:14px;font-weight:700">현재 상태</div>`;
-  const SC=D.screener; if(SC&&SC.params&&!SC.error) h+=`<div class="kv"><span>단기 스크리너</span><span>${SC.asof} 종가 기준 조건 해당 ${SC.candidates_total}종목 · '단기 스크리너' 탭에서 확인</span></div>`;
   D.indices.forEach(x=>{const s=x.snap; const extra = s.alarm_start&&s.sell_price ? ` · 이번 주 종가 ${fp(s.sell_price)} 아래 마감 시 매도` : '';
     h+=`<div class="kv"><span>${x.name}</span><span>크레마지수 ${f(s.score,1)} ${pill(s.buy_status)} &nbsp; 주간 RSI ${f(s.rsi_w,1)} ${pill(s.sell_status)}${extra}</span></div>`;});
   $('mbody').innerHTML=h; $('modal').style.display='flex';
@@ -212,6 +209,9 @@ function openModal(){
 const closeModal=()=>$('modal').style.display='none';
 $('mx').onclick=closeModal; $('mok').onclick=closeModal; $('modal').onclick=e=>{if(e.target.id==='modal')closeModal()};
 $('bellBtn').onclick=openModal;
+const closeV=()=>$('vmodal').style.display='none';
+$('valBtn').onclick=()=>{drawVal();$('vmodal').style.display='flex'};
+$('vx').onclick=closeV; $('vok').onclick=closeV; $('vmodal').onclick=e=>{if(e.target.id==='vmodal')closeV()};
 
 function start(data){
   D=data; $('login').style.display='none'; $('app').style.display='block';
@@ -226,7 +226,7 @@ function start(data){
   $('seg').querySelectorAll('button').forEach(b=>b.onclick=()=>show(+b.dataset.i));
   $('ranges').innerHTML=[['1년',52],['5년',260],['10년',520],['전체',99999]].map(([t,r])=>`<button class="btn" data-r="${r}">${t}</button>`).join('');
   $('ranges').querySelectorAll('button').forEach(b=>b.onclick=()=>{range=+b.dataset.r;drawCharts()});
-  $('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{$('tabs').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));['chart','scr','log','fg','help'].forEach(t=>$('t-'+t).classList.toggle('hide',t!==b.dataset.t));if(b.dataset.t==='fg')drawFg();if(b.dataset.t==='scr')drawScr()});
+  $('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{$('tabs').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));['chart','log','fg','help'].forEach(t=>$('t-'+t).classList.toggle('hide',t!==b.dataset.t));if(b.dataset.t==='fg')drawFg()});
   const R=D.rules;
   $('help').innerHTML=`<b>매수 (크레마지수)</b> — 6개 지표를 0~100점으로 바꿔 가중평균합니다. 높을수록 쌉니다. 매월 ${D.buy_check_day}일 기준 점수가 기준점수 이상이면 모아둔 현금으로 매수합니다. 점수가 낮다고 팔지는 않습니다.<br><br>
   <b>매도 (주간 RSI)</b> — 주간 RSI가 ${R.alarm_rsi} 이상을 ${R.alarm_weeks}주 유지하면 알람이 켜집니다. 알람 후 ${R.alarm_months}개월 안에 ${R.sell_rsi} 이하로 내려오면 그 주에 매도(레버리지는 전량), 못 내려오면 알람 해제입니다.<br><br>
@@ -262,28 +262,30 @@ function show(i){
   drawLog(); drawCharts();
 }
 
-function drawScr(){
-  const S=D.screener||{};
-  if(S.error||!S.params){ $('scrHead').innerHTML=`단기 스크리너를 계산하지 못했습니다. ${S.error||''}`; $('scrTbl').innerHTML=''; $('scrStats').innerHTML=''; $('scrYears').innerHTML=''; return; }
-  const P=S.params, sg=S.signal||{}, bs=S.baseline||{}, sr=S.signal_recent||{}, br=S.baseline_recent||{};
-  const tone=sg.mean>0&&S.edge>0.1?'p-buy':sg.mean>0?'p-warn':'p-sell';
-  $('scrHead').innerHTML=`<b>${S.asof} 종가 기준</b> · 대상 ${S.universe_src} 중 데이터 ${S.universe_n}종목<br>
-   조건: 200일선 위 · RSI(${P.rsi_period}) ${P.rsi_max} 미만 · 5일선 아래 · 20일 평균 거래대금 ${Math.round(P.min_trading_value/1e8)}억원 이상<br>
-   가정 매매: <b>다음 거래일 시가 매수 → 보유 ${P.hold_days}일째 종가 매도</b>, 왕복 비용 ${P.cost_pct}% 차감<br>
-   <span class="pill ${tone}" style="margin-top:6px">과거 검증</span> ${S.verdict||''}`;
-  const rows=(S.candidates||[]).map(r=>`<tr><td><b>${r.name}</b> <span class="sub">${r.code}</span></td><td class="r">${f(r.close,0)}</td><td class="r">${r.chg1>=0?'+':''}${f(r.chg1,2)}%</td><td class="r">${f(r.rsi,1)}</td><td class="r">${f(r.vs_ma5,2)}%</td><td class="r hide-m">+${f(r.vs_ma200,1)}%</td><td class="r hide-m">${f(r.tv20,0)}억</td><td class="r">${r.own_n?`${r.own_n}회 · ${f(r.own_win,0)}% · ${r.own_mean>=0?'+':''}${f(r.own_mean,2)}%`:'-'}</td></tr>`).join('');
-  $('scrTbl').innerHTML=`<tr><th>종목</th><th class="r">종가</th><th class="r">전일비</th><th class="r">RSI(${P.rsi_period})</th><th class="r">5일선 대비</th><th class="r hide-m">200일선 대비</th><th class="r hide-m">거래대금(20일)</th><th class="r">이 종목 과거 (횟수·승률·평균)</th></tr>`+
-    (rows||`<tr><td colspan="8" class="sub">오늘 조건에 해당하는 종목이 없습니다.</td></tr>`)+
-    (S.candidates_total>(S.candidates||[]).length?`<tr><td colspan="8" class="sub">외 ${S.candidates_total-S.candidates.length}종목 (RSI 낮은 순 ${P.max_list}개만 표시)</td></tr>`:'');
-  const line=(l,a,b)=>`<div class="kv"><span>${l}</span><span>${a} <span class="sub">/ 무작위 ${b}</span></span></div>`;
+function drawVal(){
+  const S=D.screener||{}, el=$('vbody');
+  if(S.error||!S.params){ el.innerHTML=`검증을 계산하지 못했습니다. ${S.error||''}`; return; }
+  const P=S.params, B=S.best, bt=S.baseline_test||{}, btr=S.baseline_train||{}, df=S.default;
   const pc=v=>v==null?'-':(v>=0?'+':'')+f(v,2)+'%';
-  $('scrStats').innerHTML=`<b>과거 검증 (${S.period})</b><div class="sub" style="margin:2px 0 6px">조건 신호 / 같은 종목에서 아무 날이나 샀을 때</div>
-    ${line('거래 횟수',f(sg.n,0)+'회',f(bs.n,0)+'회')}${line('승률',f(sg.win,1)+'%',f(bs.win,1)+'%')}
-    ${line('평균 수익 (비용 차감)',pc(sg.mean),pc(bs.mean))}${line('중간값',pc(sg.median),pc(bs.median))}
-    ${line('나쁜 10% 경계',pc(sg.p10),pc(bs.p10))}${line('최악 1회',pc(sg.worst),pc(bs.worst))}
-    <div style="margin-top:10px"><b>최근 3년</b></div>${line('승률',f(sr.win,1)+'%',f(br.win,1)+'%')}${line('평균 수익',pc(sr.mean),pc(br.mean))}`;
-  $('scrYears').innerHTML=`<tr><th>연도</th><th class="r">신호</th><th class="r">승률</th><th class="r">평균</th></tr>`+(S.years||[]).slice().reverse().map(y=>`<tr><td>${y.year}</td><td class="r">${y.n}</td><td class="r">${f(y.win,1)}%</td><td class="r">${pc(y.mean)}</td></tr>`).join('');
-  $('scrNote').innerHTML=`이 목록은 정해진 조건에 걸린 종목일 뿐 매수 추천이 아닙니다. 과거 검증은 <b>현재 목록에 있는 종목</b>으로만 계산해 상장폐지·편출 종목이 빠져 있어 실제보다 좋게 나올 수 있습니다(생존 편향). 비용 ${P.cost_pct}%는 거래세·수수료·체결 차이를 묶은 가정값이며 settings.json에서 바꿀 수 있습니다. 시가 급등락, 거래정지, 상·하한가는 반영하지 않았습니다.`;
+  const cell=x=>x?`${pc(x.mean)} <span class="sub">(${f(x.win,0)}% · ${f(x.n,0)}회)</span>`:'-';
+  let h=`<div class="ev" style="border-color:${S.passed?C.buy:C.sell}"><b style="color:${S.passed?C.buy:C.sell}">${S.passed?'검증 통과':'검증 미통과'}</b><div>${S.verdict||''}</div></div>
+   <div class="sub" style="line-height:1.7;margin:8px 0 4px">${S.asof} 종가 기준 · 코스피 대형주 ${S.universe_n}종목 · 다음 날 시가 매수 → 보유 ${P.hold_days}일째 종가 매도 · 왕복 비용 ${P.cost_pct}% 차감<br>
+   <b>① 학습 기간</b> ${S.train_period}: 규칙 후보 ${S.grid.length}개를 돌려 비용 차감 평균 수익이 가장 좋은 규칙을 고름<br>
+   <b>② 검증 기간</b> ${S.test_period}: 고른 규칙을 <b>한 번도 보지 않은</b> 최근 기간에 그대로 적용</div>
+   <table style="margin-top:8px"><tr><th>규칙</th><th class="r">① 학습 기간 평균 (승률·횟수)</th><th class="r">② 검증 기간 평균 (승률·횟수)</th></tr>
+   ${B?`<tr><td><b>선택된 규칙</b><div class="sub">${B.rule}</div></td><td class="r">${cell(B.train)}</td><td class="r"><b>${cell(B.test)}</b></td></tr>`:''}
+   <tr><td>기본 규칙<div class="sub">${df.rule}</div></td><td class="r">${cell(df.train)}</td><td class="r">${cell(df.test)}</td></tr>
+   <tr><td>무작위 진입<div class="sub">같은 종목을 아무 날이나 샀을 때</div></td><td class="r">${cell(btr)}</td><td class="r">${cell(bt)}</td></tr></table>`;
+  if(S.overfit_gap!=null) h+=`<div class="sub" style="margin-top:6px">선택된 규칙의 학습→검증 성적 하락: ${f(S.overfit_gap,2)}%p ${S.overfit_gap>0.15?'(학습 기간에 맞춰진 정도가 큼)':''}</div>`;
+  const g=S.grid.slice().sort((a,b)=>(b.train?b.train.mean:-99)-(a.train?a.train.mean:-99));
+  h+=`<details style="margin-top:12px"><summary><b>규칙 후보 ${g.length}개 전체</b> <span class="sub">(학습 성적 순)</span></summary><table style="margin-top:6px"><tr><th>규칙</th><th class="r">학습</th><th class="r">검증</th></tr>`+
+    g.map(x=>`<tr${B&&x.rule===B.rule?' style="background:var(--soft)"':''}><td>${x.rule}</td><td class="r">${x.train?pc(x.train.mean)+` <span class="sub">${x.train.n}회</span>`:'-'}</td><td class="r">${x.test?pc(x.test.mean)+` <span class="sub">${x.test.n}회</span>`:'-'}</td></tr>`).join('')+`</table>
+    <div class="sub" style="margin-top:4px">학습 성적이 좋은 규칙이 검증에서도 좋다면 규칙에 힘이 있다는 뜻이고, 순서가 뒤섞이면 우연에 가깝다는 뜻입니다.</div></details>`;
+  if(B){ const rows=(S.candidates||[]).map(r=>`<tr><td><b>${r.name}</b> <span class="sub">${r.code}</span></td><td class="r">${f(r.close,0)}</td><td class="r">${r.chg1>=0?'+':''}${f(r.chg1,2)}%</td><td class="r">${f(r.rsi,1)}</td></tr>`).join('');
+    h+=`<details style="margin-top:10px"${S.passed?' open':''}><summary><b>선택된 규칙에 오늘 해당하는 종목 ${S.candidates_total}개</b> ${S.passed?'':'<span class="sub">(검증 미통과 — 참고용)</span>'}</summary>
+      <table style="margin-top:6px"><tr><th>종목</th><th class="r">종가</th><th class="r">전일비</th><th class="r">RSI(2)</th></tr>${rows||'<tr><td colspan="4" class="sub">없음</td></tr>'}</table></details>`; }
+  h+=`<div class="foot" style="margin-top:12px">조건에 걸린 종목일 뿐 매수 추천이 아닙니다. 지금 목록에 있는 종목으로만 계산해 상장폐지·편출 종목이 빠져 있고(생존 편향), 비용 ${P.cost_pct}%는 가정값입니다. 매일 아침 전날 한국 종가로 다시 계산합니다.</div>`;
+  el.innerHTML=h;
 }
 
 function drawFg(){
