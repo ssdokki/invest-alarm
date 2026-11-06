@@ -1,4 +1,12 @@
-"""코스피 단기(2일 보유) 반등 스크리너 + 과거 검증.
+"""코스피 단기(2일 보유) 반등 규칙 — 떼어 둔 기간 검증(아웃오브샘플).
+
+방법:
+  1) 학습 기간(앞 7년)에서 규칙 후보 12개를 모두 돌려 보고, 비용 차감 평균 수익이 가장 좋은 규칙을 고른다.
+  2) 고른 규칙을 한 번도 보지 않은 검증 기간(최근 3년)에 그대로 적용해 결과를 따로 잰다.
+  3) 검증 기간에서도 비용 차감 후 플러스이고 무작위 진입보다 나아야 '통과'.
+  학습 기간 성적만 좋고 검증 기간에 무너지면, 과거에 우연히 맞았던(과최적화) 규칙이라는 뜻이다.
+
+후보 규칙의 기본 틀(아래는 기본 규칙):
 
 조건 (전날 종가 기준, 모두 만족):
   1) 종가 > 200일 이동평균           — 장기 상승 추세 안의 눌림만
@@ -102,6 +110,7 @@ def frame(df: pd.DataFrame, p: dict) -> pd.DataFrame:
     f["vs_ma5"] = c / f["ma5"] - 1
     f["vs_ma200"] = c / f["ma200"] - 1
     f["signal"] = (c > f["ma200"]) & (f["rsi"] < p["rsi_max"]) & (c < f["ma5"]) & (f["tv20"] >= p["min_trading_value"])
+    f["rsi5"] = _rsi(c, 5)
     h = p["hold_days"]
     f["entry"] = df["Open"].shift(-1)                      # 다음 거래일 시가
     f["exit"] = c.shift(-h)                                # 보유 h일째 종가
@@ -118,7 +127,31 @@ def _stats(r: pd.Series) -> dict | None:
             "p10": round(float(r.quantile(0.1)), 2)}
 
 
-def run(cfg, universe: pd.DataFrame, prices: dict) -> dict:
+GRID = [
+    {"rsi_max": r, "drop": d, "market": m}
+    for r in (5, 10, 15) for d in (False, True) for m in (False, True)
+]
+
+
+def _label(g) -> str:
+    t = [f"RSI(2) {g['rsi_max']} 미만"]
+    if g["drop"]:
+        t.append("당일 -2% 이상 하락")
+    if g["market"]:
+        t.append("코스피 200일선 위일 때만")
+    return " · ".join(t)
+
+
+def _signal(f: pd.DataFrame, g: dict, p: dict, mkt_up: pd.Series | None) -> pd.Series:
+    s = (f["close"] > f["ma200"]) & (f["rsi"] < g["rsi_max"]) & (f["close"] < f["ma5"]) & (f["tv20"] >= p["min_trading_value"])
+    if g["drop"]:
+        s &= f["chg1"] <= -0.02
+    if g["market"] and mkt_up is not None:
+        s &= mkt_up.reindex(f.index, method="ffill").fillna(False).astype(bool)
+    return s
+
+
+def run(cfg, universe: pd.DataFrame, prices: dict, kospi: pd.Series | None = None) -> dict:
     p = params(cfg)
     names = dict(zip(universe["code"], universe["name"]))
     frames = {c: frame(df, p) for c, df in prices.items()}
@@ -126,42 +159,62 @@ def run(cfg, universe: pd.DataFrame, prices: dict) -> dict:
         return {"error": "가격 데이터를 받지 못했습니다.", "params": p}
     last_day = max(f.index[-1] for f in frames.values())
     start = last_day - pd.DateOffset(years=p["years"])
+    split = last_day - pd.DateOffset(years=p.get("holdout_years", 3))
+    mkt_up = (kospi > kospi.rolling(200).mean()) if kospi is not None and len(kospi) else None
 
-    sig_rets, base_rets, rows, per_year = [], [], [], {}
+    def collect(g):
+        tr, te = [], []
+        for f in frames.values():
+            sig = _signal(f, g, p, mkt_up)
+            r = f.loc[sig, "ret"].dropna()
+            tr.append(r[(r.index >= start) & (r.index < split)])
+            te.append(r[r.index >= split])
+        return pd.concat(tr), pd.concat(te)
+
+    rets = [f["ret"].dropna() for f in frames.values()]
+    base_tr = pd.concat([r[(r.index >= start) & (r.index < split)] for r in rets])
+    base_te = pd.concat([r[r.index >= split] for r in rets])
+    grid = []
+    for g in GRID:
+        tr, te = collect(g)
+        grid.append({"rule": _label(g), "g": g, "train": _stats(tr), "test": _stats(te)})
+    ok = [x for x in grid if x["train"] and x["train"]["n"] >= p.get("min_trades", 200)]
+    best = max(ok, key=lambda x: x["train"]["mean"]) if ok else None
+    default = next(x for x in grid if x["g"] == {"rsi_max": 10, "drop": False, "market": False})
+
+    out = {"asof": last_day.strftime("%Y-%m-%d"), "params": p, "universe_n": len(frames),
+           "train_period": f"{start:%Y-%m-%d} ~ {split - pd.Timedelta(days=1):%Y-%m-%d}",
+           "test_period": f"{split:%Y-%m-%d} ~ {last_day:%Y-%m-%d}",
+           "baseline_train": _stats(base_tr), "baseline_test": _stats(base_te),
+           "grid": [{k: v for k, v in x.items() if k != "g"} for x in grid],
+           "default": {k: v for k, v in default.items() if k != "g"}, "market_filter": mkt_up is not None}
+    if not best:
+        out["verdict"] = "학습 기간에 거래가 충분한 규칙이 없어 검증하지 못했습니다."
+        out["passed"] = False
+        return out
+    out["best"] = {k: v for k, v in best.items() if k != "g"}
+    te, bte = best["test"], out["baseline_test"]
+    passed = bool(te and te["mean"] > 0 and bte and te["mean"] - bte["mean"] > 0.1 and te["n"] >= 50)
+    out["passed"] = passed
+    if passed:
+        out["verdict"] = "학습 기간에 고른 규칙이 떼어 둔 최근 기간에서도 비용 차감 후 플러스였고 무작위 진입보다 나았습니다."
+    elif te and te["mean"] > 0:
+        out["verdict"] = "떼어 둔 기간에서 플러스였지만 무작위 진입과 차이가 작거나 거래가 적어, 규칙의 힘이라고 보기 어렵습니다."
+    else:
+        out["verdict"] = "학습 기간에서 가장 좋았던 규칙도 떼어 둔 최근 기간에서는 비용 차감 후 마이너스였습니다. 단타 규칙으로 쓰기 어렵습니다."
+    gap = (best["train"]["mean"] - te["mean"]) if te else None
+    out["overfit_gap"] = round(gap, 2) if gap is not None else None
+
+    rows = []
     for code, f in frames.items():
-        h = f[f.index >= start]
-        s = h.loc[h["signal"], "ret"].dropna()
-        sig_rets.append(s)
-        base_rets.append(h["ret"].dropna())
-        for y, v in s.groupby(s.index.year):
-            per_year.setdefault(int(y), []).append(v)
-        if f.index[-1] == last_day and bool(f["signal"].iloc[-1]):
+        if f.index[-1] != last_day:
+            continue
+        sig = _signal(f, best["g"], p, mkt_up)
+        if bool(sig.iloc[-1]):
             x = f.iloc[-1]
-            own = _stats(f.loc[f["signal"], "ret"])
             rows.append({"code": code, "name": names.get(code, code), "close": round(float(x["close"]), 0),
                          "chg1": round(float(x["chg1"] * 100), 2), "rsi": round(float(x["rsi"]), 1),
-                         "vs_ma5": round(float(x["vs_ma5"] * 100), 2), "vs_ma200": round(float(x["vs_ma200"] * 100), 1),
-                         "tv20": round(float(x["tv20"] / 1e8), 0),
-                         "own_n": own["n"] if own else 0, "own_win": own["win"] if own else None,
-                         "own_mean": own["mean"] if own else None})
-    sig = pd.concat(sig_rets) if sig_rets else pd.Series(dtype=float)
-    base = pd.concat(base_rets) if base_rets else pd.Series(dtype=float)
-    recent_cut = last_day - pd.DateOffset(years=3)
+                         "vs_ma5": round(float(x["vs_ma5"] * 100), 2)})
     rows.sort(key=lambda r: r["rsi"])
-    years = [{"year": y, **_stats(pd.concat(v))} for y, v in sorted(per_year.items())]
-    out = {
-        "asof": last_day.strftime("%Y-%m-%d"), "params": p, "universe_n": len(frames),
-        "candidates": rows[: p["max_list"]], "candidates_total": len(rows),
-        "signal": _stats(sig), "baseline": _stats(base),
-        "signal_recent": _stats(sig[sig.index >= recent_cut]), "baseline_recent": _stats(base[base.index >= recent_cut]),
-        "years": years, "period": f"{start:%Y-%m-%d} ~ {last_day:%Y-%m-%d}",
-    }
-    s, b = out["signal"], out["baseline"]
-    if s and b:
-        edge = s["mean"] - b["mean"]
-        out["verdict"] = (
-            "과거 검증상 비용 차감 후 평균 수익이 플러스이고 무작위 진입보다 나았습니다." if s["mean"] > 0 and edge > 0.1 else
-            "비용 차감 후 평균 수익이 플러스이지만 무작위 진입과 큰 차이가 없습니다." if s["mean"] > 0 else
-            "비용 차감 후 평균 수익이 마이너스입니다. 이 조건만으로 단타하는 것은 과거 기준으로 불리했습니다.")
-        out["edge"] = round(edge, 2)
+    out["candidates"], out["candidates_total"] = rows[: p["max_list"]], len(rows)
     return out
