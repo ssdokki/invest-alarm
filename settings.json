@@ -70,6 +70,6 @@
     "min_trading_value": 5000000000,
     "cost_pct": 0.3,
     "years": 10,
-    "max_list": 20
+    "max_list": 20, "holdout_years": 3, "min_trades": 200
   }
 }
