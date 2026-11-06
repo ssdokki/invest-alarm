@@ -21,7 +21,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-from core import data, signals
+from core import data, screener, signals
 from core.settings import AXES, load
 
 ROOT = Path(__file__).resolve().parent
@@ -119,6 +119,23 @@ def main(test=False, out="site"):
     else:
         print("공포탐욕 비교: CNN 데이터 없음")
     print("공포탐욕 상태:", fginfo["cnn_status"], "/ 자체 계산 최근값:", payload["fg"]["proxy_last"])
+    try:
+        if test:
+            uni, uni_src = pd.read_csv(screener.UNIVERSE_CSV, dtype=str), "테스트(가상 데이터)"
+            prices = screener.synthetic(list(uni["code"][:40]))
+        else:
+            uni, uni_src = screener.load_universe()
+            prices = screener.fetch_ohlcv(list(uni["code"]))
+        scr = screener.run(cfg, uni, prices)
+        scr["universe_src"] = uni_src
+        if scr.get("signal"):
+            print(f"단기 스크리너({scr['asof']} 종가, {scr['universe_n']}종목): 오늘 후보 {scr['candidates_total']}개 / "
+                  f"과거 신호 {scr['signal']['n']}회 승률 {scr['signal']['win']}% 평균 {scr['signal']['mean']}% "
+                  f"(무작위 {scr['baseline']['mean']}%) → {scr.get('verdict', '')}")
+    except Exception as e:
+        print("단기 스크리너 실패:", e)
+        scr = {"error": str(e)}
+    payload["screener"] = scr
     enc = encrypt(payload, pw)
     tpl = (ROOT / "site_template.html").read_text(encoding="utf-8")
     chart_js = (ROOT / "vendor" / "chart.umd.js").read_text(encoding="utf-8")
