@@ -29,6 +29,7 @@ jobs:
       - name: 패키지 설치
         run: |
           pip install pandas numpy yfinance requests cryptography
+          pip install pykrx || echo "pykrx 설치 실패 - 저장소 종목 목록 사용"
           mkdir -p vendor
           npm pack chart.js@4.4.1 --silent
           tar xzf chart.js-4.4.1.tgz
