@@ -81,7 +81,7 @@
       "step": 5,
       "min_hold": 5,
       "holdout_years": 4,
-      "min_train_years": 6,
+      "min_train_years": 5,
       "cost_pct": 0.3,
       "n_random": 300,
       "benchmark": "^KS11"
@@ -102,7 +102,7 @@
         "anchor": "chobok",
         "why": "초복·중복·말복에 닭고기 소비가 늘어나는 시기",
         "stocks": {
-          "하림": "136480.KS",
+          "하림": "136480.KQ",
           "마니커": "027740.KS",
           "체리부로": "066360.KQ"
         }
@@ -124,7 +124,7 @@
         "why": "명절 선물세트·식품 수요가 느는 시기",
         "stocks": {
           "CJ제일제당": "097950.KS",
-          "동원F&B": "049770.KS"
+          "대상": "001680.KS"
         }
       },
       {
