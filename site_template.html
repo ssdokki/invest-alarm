@@ -64,9 +64,11 @@ th{color:var(--sub);font-weight:600}
 td.r,th.r{text-align:right}
 .hide{display:none}
 /* 팝업 */
-#modal,#vmodal{position:fixed;inset:0;background:rgba(15,20,30,.45);display:none;align-items:flex-start;justify-content:center;padding:6vh 16px;z-index:50}
-#modal .card,#vmodal .card{width:100%;max-width:720px;max-height:86vh;overflow:auto;padding:22px}
-#modal h2,#vmodal h2{margin:0 0 12px;font-size:1.3rem;display:flex;justify-content:space-between}
+#modal,#vmodal,#smodal{position:fixed;inset:0;background:rgba(15,20,30,.45);display:none;align-items:flex-start;justify-content:center;padding:6vh 16px;z-index:50}
+#smodal .card{max-width:920px}
+#sbody td,#sbody th{padding:7px 5px;vertical-align:top}#sbody th{white-space:nowrap}
+#modal .card,#vmodal .card,#smodal .card{width:100%;max-width:720px;max-height:86vh;overflow:auto;padding:22px}
+#modal h2,#vmodal h2,#smodal h2{margin:0 0 12px;font-size:1.3rem;display:flex;justify-content:space-between}
 .ev{border-left:5px solid;border-radius:8px;background:var(--soft);padding:10px 14px;margin:8px 0}
 .ev b{font-size:.98rem}.ev div{font-size:.88rem;margin-top:3px}
 #mbody .kv{flex-wrap:wrap;gap:4px}
@@ -91,7 +93,7 @@ td.r,th.r{text-align:right}
 <div id="app" class="wrap">
   <div class="top">
     <div><h1>투자알람</h1><div class="sub" id="meta"></div><div class="sub" id="notes"></div></div>
-    <div class="acts"><button class="btn" id="valBtn">단기 검증</button><button class="btn" id="bellBtn">알림</button><button class="btn" id="logout">잠금</button></div>
+    <div class="acts"><button class="btn" id="seaBtn">계절 패턴</button><button class="btn" id="valBtn">단기 검증</button><button class="btn" id="bellBtn">알림</button><button class="btn" id="logout">잠금</button></div>
   </div>
   <div class="grid3" id="minis"></div>
   <div class="seg" id="seg"></div>
@@ -124,6 +126,8 @@ td.r,th.r{text-align:right}
 <div id="modal"><div class="card"><h2><span>알림</span><button class="btn" id="mx">✕</button></h2><div id="mbody"></div><button class="btn primary" id="mok" style="width:100%;margin-top:14px;padding:11px">확인</button></div></div>
 
 <div id="vmodal"><div class="card"><h2><span>단기(2일) 규칙 — 떼어 둔 기간 검증</span><button class="btn" id="vx">✕</button></h2><div id="vbody"></div><button class="btn primary" id="vok" style="width:100%;margin-top:14px;padding:11px">닫기</button></div></div>
+
+<div id="smodal"><div class="card"><h2><span>계절·이벤트 패턴</span><button class="btn" id="sx">✕</button></h2><div id="sbody"></div><button class="btn primary" id="sok" style="width:100%;margin-top:14px;padding:11px">닫기</button></div></div>
 
 <script>/*__CHARTJS__*/</script>
 <script>
@@ -201,6 +205,7 @@ function openModal(){
   if(items.length){ h+=`<div class="sub" style="margin-bottom:4px"><b style="color:var(--ink)">최근 ${D.popup_days}일 신호 ${items.length}건</b></div>`;
     items.forEach(([a,n,e])=>{const [l,c]=KIND[e.type]; h+=`<div class="ev" style="border-color:${c}"><b style="color:${c}">${n} ${l}</b>${a<=D.popup_new_days?' <span class="pill p-sell">NEW</span>':''}<div>${evLine(e)}</div></div>`;});
   } else h+=`<div class="ev" style="border-color:${C.buy}">최근 ${D.popup_days}일 동안 새 신호가 없습니다.</div>`;
+  seaSoon().forEach(([ev,it])=>{const n=it.next; h+=`<div class="ev" style="border-color:${C.blue}"><b style="color:${C.blue}">${it.name} 계절 패턴 (${ev.name})</b><div>${n.phase==='매수일 전'?`매수일 ${n.buy} (D-${n.dday})`:`보유 구간 · 매도일 ${n.sell} (D-${n.dday})`} · 검증 통과 규칙 · '계절 패턴'에서 확인</div></div>`;});
   h+=`<div style="margin-top:14px;font-weight:700">현재 상태</div>`;
   D.indices.forEach(x=>{const s=x.snap; const extra = s.alarm_start&&s.sell_price ? ` · 이번 주 종가 ${fp(s.sell_price)} 아래 마감 시 매도` : '';
     h+=`<div class="kv"><span>${x.name}</span><span>크레마지수 ${f(s.score,1)} ${pill(s.buy_status)} &nbsp; 주간 RSI ${f(s.rsi_w,1)} ${pill(s.sell_status)}${extra}</span></div>`;});
@@ -211,6 +216,9 @@ $('mx').onclick=closeModal; $('mok').onclick=closeModal; $('modal').onclick=e=>{
 $('bellBtn').onclick=openModal;
 const closeV=()=>$('vmodal').style.display='none';
 $('valBtn').onclick=()=>{drawVal();$('vmodal').style.display='flex'};
+const closeS=()=>$('smodal').style.display='none';
+$('seaBtn').onclick=()=>{drawSea();$('smodal').style.display='flex'};
+$('sx').onclick=closeS; $('sok').onclick=closeS; $('smodal').onclick=e=>{if(e.target.id==='smodal')closeS()};
 $('vx').onclick=closeV; $('vok').onclick=closeV; $('vmodal').onclick=e=>{if(e.target.id==='vmodal')closeV()};
 
 function start(data){
@@ -286,6 +294,78 @@ function drawVal(){
       <table style="margin-top:6px"><tr><th>종목</th><th class="r">종가</th><th class="r">전일비</th><th class="r">RSI(2)</th></tr>${rows||'<tr><td colspan="4" class="sub">없음</td></tr>'}</table></details>`; }
   h+=`<div class="foot" style="margin-top:12px">조건에 걸린 종목일 뿐 매수 추천이 아닙니다. 지금 목록에 있는 종목으로만 계산해 상장폐지·편출 종목이 빠져 있고(생존 편향), 비용 ${P.cost_pct}%는 가정값입니다. 매일 아침 전날 한국 종가로 다시 계산합니다.</div>`;
   el.innerHTML=h;
+}
+
+function seaSoon(){
+  const S=D.seasonal, out=[]; if(!S||!S.events) return out;
+  S.events.forEach(ev=>ev.items.forEach(it=>{const n=it.next; if(it.passed&&n&&n.phase&&(n.phase==='보유 구간'||n.dday<=14)) out.push([ev,it]);}));
+  return out;
+}
+let seaSel=null, seaSeason='전체';
+function drawSea(){
+  const S=D.seasonal||{}, el=$('sbody');
+  if(S.error||!S.events){ el.innerHTML=`계절 패턴을 계산하지 못했습니다. ${S.error||''}`; return; }
+  const P=S.params, pc=v=>v==null?'-':(v>=0?'+':'')+f(v,2)+'%';
+  const gp=g=>`<span class="pill ${g==='통과'?'p-buy':g==='약함'?'p-warn':g==='미통과'?'p-sell':'p-none'}">${g||'오류'}</span>`;
+  const dd=k=>k>=0?`D+${k}`:`D${k}`;
+  let h=`<div class="sub" style="line-height:1.7">매년 같은 이벤트 날짜(D-day) 전후 <b>D-${P.pre} ~ D+${P.post} 거래일</b>의 흐름을 모아, 같은 기간 <b>코스피보다 얼마나 더 올랐는지</b>로 비교합니다.
+   ① 앞쪽 연도(학습)로 가장 좋았던 <b>매수일 → 매도일</b>을 고르고 ② 떼어 둔 최근 <b>${P.holdout_years}년(검증)</b>에 그대로 적용합니다.
+   ③ 기준일을 매년 아무 날짜로 바꿔 같은 방식으로 ${P.n_random}번 찾아본 결과(무작위 대조)와도 비교합니다. 왕복 비용 ${P.cost_pct}% 차감. 표의 학습·검증 값은 <b>코스피 대비 초과수익 평균</b>이고, '3/4년↑'은 코스피보다 나았던 해의 수입니다.</div>
+   <div class="seg" style="margin:10px 0 4px">${['전체','봄','여름','가을','겨울'].map(x=>`<button class="${x===seaSeason?'on':''}" data-sea="${x}">${x}</button>`).join('')}</div>`;
+  S.events.forEach((ev,ei)=>{ if(seaSeason!=='전체'&&ev.season!==seaSeason) return;
+    let dates='';
+    if(ev.dates.boknal){ dates=Object.entries(ev.dates.boknal).map(([y,b])=>`${y}년 초복 ${b.chobok.slice(5)} · 중복 ${b.jungbok.slice(5)} · 말복 ${b.malbok.slice(5)}`).join('<br>'); }
+    else { const ys=Object.keys(ev.dates).filter(k=>/^\d{4}$/.test(k)).slice(1); dates=ys.map(y=>`${y}년 ${ev.dates[y]}`).join(' · '); }
+    h+=`<div class="card" style="margin-top:12px;padding:14px"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${ev.season} · ${ev.name}</b><span class="sub">${dates}</span></div>
+      <div class="sub" style="margin:2px 0 8px">${ev.why||''}</div><div style="overflow-x:auto"><table><tr><th>종목</th><th>판정</th><th>매수→매도</th><th class="r">학습</th><th class="r">검증</th><th>다음 일정</th><th>지금 (크레마·주간RSI)</th></tr>`;
+    ev.items.forEach((it,ii)=>{ const key=ei+'-'+ii, sel=seaSel===key;
+      if(it.error&&!it.grade){ h+=`<tr><td><b>${it.name}</b></td><td colspan="6" class="sub">${it.error}</td></tr>`; return; }
+      const n=it.next, w=it.now;
+      const nx=n?`${n.buy.slice(2).replaceAll('-','.')} 매수<br>${n.sell.slice(2).replaceAll('-','.')} 매도${n.phase?`<div class="sub">${n.phase} D-${n.dday}</div>`:''}`:'-';
+      const now=w?`${f(w.score,1)} ${pill(w.buy_status)}<div class="sub">주간 RSI ${f(w.rsi_w,1)} · ${w.sell_status}</div>`:'-';
+      h+=`<tr data-sk="${key}" style="cursor:pointer${sel?';background:var(--soft)':''}"><td><b>${it.name}</b><div class="sub">${it.ticker.replace(/\.K[SQ]$/,'')}</div></td><td>${gp(it.grade)}</td>
+        <td style="white-space:nowrap">${it.buy_off!=null?`${dd(it.buy_off)}<br>→ ${dd(it.sell_off)}`:'-'}</td>
+        <td class="r">${it.train?`${pc(it.train.mean)}<div class="sub">${it.train.wins}/${it.train.n}년↑</div>`:'-'}</td>
+        <td class="r">${it.test?`<b>${pc(it.test.mean)}</b><div class="sub">${it.test.wins}/${it.test.n}년↑</div>`:'-'}</td>
+        <td>${nx}</td><td>${now}</td></tr>`;
+      if(sel) h+=`<tr><td colspan="7" style="padding:12px 4px">${seaDetail(it)}</td></tr>`;
+    });
+    h+=`</table></div></div>`;
+  });
+  h+=`<div class="foot" style="margin-top:12px">행을 누르면 연도별 결과와 평균 흐름 차트가 열립니다. 날짜는 주말만 뺀 근사치라 공휴일이 끼면 하루이틀 밀릴 수 있습니다.
+   종목·이벤트는 settings.json의 seasonal에서 바꿀 수 있습니다. 표본이 1년에 한 번뿐이라 10여 개에 불과하므로, '통과'도 확률이 조금 나은 정도로만 보시고
+   크레마지수·주간RSI(지금 칸)와 함께 판단하세요. 매수 추천이 아닙니다.</div>`;
+  el.innerHTML=h;
+  el.querySelectorAll('[data-sea]').forEach(b=>b.onclick=()=>{seaSeason=b.dataset.sea;seaSel=null;drawSea()});
+  el.querySelectorAll('[data-sk]').forEach(r=>r.onclick=()=>{seaSel=seaSel===r.dataset.sk?null:r.dataset.sk;drawSea()});
+  if(seaSel){ const [ei,ii]=seaSel.split('-').map(Number); const it=S.events[ei].items[ii]; if(it&&it.path) seaChart(it); }
+}
+function seaDetail(it){
+  const pc=v=>v==null?'-':(v>=0?'+':'')+f(v,2)+'%';
+  let h=`<div class="ev" style="border-color:${it.passed?C.buy:it.grade==='약함'?C.warn:C.sell};margin-top:0"><b>${it.grade}</b> · ${it.verdict||''}</div>`;
+  if(!it.path) return h;
+  h+=`<div class="sub" style="margin:6px 0">무작위 대조: 아무 날짜를 기준일로 잡고 최적 조합을 찾으면 학습 성적이 보통 ${pc(it.rand_median)} 정도 나옵니다 (이 종목 실제 ${pc(it.train_best_raw)}, 무작위가 이 이상 나올 확률 ${Math.round(it.rand_p*100)}%).
+     · 주가 자체 기준(코스피 차감 전) 학습 ${pc(it.train_raw&&it.train_raw.mean)} / 검증 ${pc(it.test_raw&&it.test_raw.mean)}</div>
+   <div class="chart sm" style="height:220px"><canvas id="cSea"></canvas></div>
+   <div style="overflow-x:auto;margin-top:8px"><table style="font-size:.8rem"><tr><th>연도</th>${it.per_year.map(y=>`<th class="r" style="${y.set==='검증'?'color:var(--accent)':''}">${String(y.year).slice(2)}</th>`).join('')}</tr>
+   <tr><td class="sub" style="white-space:nowrap">코스피 대비</td>${it.per_year.map(y=>`<td class="r" style="color:${y.excess>0?C.buy:C.sell}">${f(y.excess,1)}</td>`).join('')}</tr>
+   <tr><td class="sub" style="white-space:nowrap">주가 자체</td>${it.per_year.map(y=>`<td class="r">${f(y.raw,1)}</td>`).join('')}</tr></table>
+   <div class="sub">단위 %, 비용 차감. 파란 연도가 떼어 둔 검증 연도입니다. 학습 ${it.train_years[0]}~${it.train_years.slice(-1)[0]} · 검증 ${it.test_years[0]}~${it.test_years.slice(-1)[0]}</div></div>`;
+  return h;
+}
+function seaChart(it){
+  const p=it.path, lab=p.off.map(k=>k===0?'D':k>0?'+'+k:String(k));
+  const vline={id:'vline',afterDraw(c){const x=c.scales.x,a=c.chartArea,g=c.ctx;[[it.buy_off,C.buy,'매수'],[it.sell_off,C.sell,'매도'],[0,C.muted,'D-day']].forEach(([k,col,t])=>{
+    const px=x.getPixelForValue(p.off.indexOf(k)); g.save();g.strokeStyle=col;g.setLineDash(k===0?[3,3]:[]);g.lineWidth=1.5;g.beginPath();g.moveTo(px,a.top);g.lineTo(px,a.bottom);g.stroke();
+    g.fillStyle=col;g.font='11px sans-serif';g.fillText(t,px+3,a.top+11);g.restore();});}};
+  charts.cSea&&charts.cSea.destroy();
+  charts.cSea=new Chart($('cSea'),{type:'line',data:{labels:lab,datasets:[
+    {label:`학습 연도 평균 (코스피 대비)`,data:p.train,borderColor:C.blue,borderWidth:2,pointRadius:0},
+    {label:`검증 연도 평균 (코스피 대비)`,data:p.test,borderColor:C.warn,borderWidth:2,pointRadius:0},
+    {label:'전체 연도 평균 (주가 자체)',data:p.raw,borderColor:C.muted,borderWidth:1,borderDash:[4,3],pointRadius:0}]},
+    options:{animation:false,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${f(c.parsed.y,2)}%`}}},
+      scales:{x:{ticks:{maxTicksLimit:11,font:{size:10}}},y:{ticks:{callback:v=>v+'%',font:{size:10}}}}},plugins:[vline]});
 }
 
 function drawFg(){
