@@ -8,6 +8,7 @@
 """
 import argparse
 import base64
+import copy
 import json
 import os
 import sys
@@ -21,7 +22,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-from core import data, screener, signals
+from core import data, screener, seasonal, signals
 from core.settings import AXES, load
 
 ROOT = Path(__file__).resolve().parent
@@ -78,6 +79,54 @@ def encrypt(obj, password: str) -> dict:
     ct = AESGCM(key).encrypt(iv, json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode(), None)
     b64 = lambda b: base64.b64encode(b).decode()
     return {"v": 1, "iter": ITER, "salt": b64(salt), "iv": b64(iv), "ct": b64(ct)}
+
+
+def _crema_now(name, ticker, close, fg, cfg):
+    """계절 종목에도 지금 쓰는 크레마지수·주간RSI 로직을 그대로 적용 (한국 종목: 맞춤 보정)."""
+    c = copy.deepcopy(cfg)
+    c.indices, c.modes, c.vol_index = {name: ticker}, {name: "relative"}, {}
+    s = signals.compute(name, close, None, fg, c.rules, c)["snap"]
+    return {k: clean(s[k]) for k in ("asof", "close", "score", "avg_score", "threshold", "buy_status",
+                                     "rsi_w", "sell_status", "dist200", "ytd_dd")}
+
+
+def build_seasonal(cfg, closes, fg, test):
+    evs = seasonal.events_cfg(cfg)
+    tick = {t: n for ev in evs for n, t in ev["stocks"].items()}
+    px = dict(closes)
+    bm = seasonal.params(cfg)["benchmark"]
+    if test:
+        rng = np.random.default_rng(5)
+        k = closes[bm]
+        for i, t in enumerate(tick):
+            r = rng.normal(0.0002, 0.02, len(k)) + np.log(k).diff().fillna(0).to_numpy()
+            px[t] = pd.Series(10000 * np.exp(np.cumsum(r)), index=k.index)[k.index >= "2011-01-01"]
+    else:
+        if bm not in px:
+            px[bm] = data.fetch_close(bm)[0]
+        for t in tick:
+            try:
+                px[t] = data.fetch_close(t)[0]
+            except Exception as e:
+                print(f"계절 패턴: {t} 수신 실패 ({e})")
+    crema = {}
+    for t, n in tick.items():
+        if t in px:
+            try:
+                crema[t] = _crema_now(n, t, px[t], fg, cfg)
+            except Exception as e:
+                print(f"계절 패턴: {n} 크레마지수 계산 실패 ({e})")
+    out = seasonal.run(cfg, px, crema)
+    for ev in out.get("events", []):
+        for it in ev["items"]:
+            if it.get("grade") and it.get("train"):
+                print(f"계절 패턴 [{ev['name']}] {it['name']}: 매수 D{it['buy_off']:+d} → 매도 D{it['sell_off']:+d} | "
+                      f"학습 {it['train_years'][0]}~{it['train_years'][-1]} 코스피 대비 {it['train']['mean']:+.2f}% "
+                      f"| 검증 {it['test_years'][0]}~{it['test_years'][-1]} {it['test']['mean']:+.2f}% "
+                      f"({it['test']['wins']}/{it['test']['n']}년) | 무작위 대조 {it['rand_p']} → {it['grade']}")
+            else:
+                print(f"계절 패턴 [{ev['name']}] {it['name']}: {it.get('grade') or ''} {it.get('verdict') or it.get('error')}")
+    return out
 
 
 def main(test=False, out="site"):
@@ -137,6 +186,11 @@ def main(test=False, out="site"):
         print("단기 스크리너 실패:", e)
         scr = {"error": str(e)}
     payload["screener"] = scr
+    try:
+        payload["seasonal"] = build_seasonal(cfg, closes, fg, test)
+    except Exception as e:
+        print("계절 패턴 실패:", e)
+        payload["seasonal"] = {"error": str(e)}
     enc = encrypt(payload, pw)
     tpl = (ROOT / "site_template.html").read_text(encoding="utf-8")
     chart_js = (ROOT / "vendor" / "chart.umd.js").read_text(encoding="utf-8")
